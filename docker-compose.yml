@@ -1,0 +1,21 @@
+# Asking Docker to run a PostgrSQL database, and expose it on localhost
+
+services:
+  database:
+    image: postgres:17
+    container_name: training-tracker-db
+    restart: unless-stopped
+
+    environment:
+      POSTGRES_USER: training_user
+      POSTGRES_PASSWORD: training_password
+      POSTGRES_DB: training_tracker
+
+    ports:
+      - "5432:5432"
+
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+
+volumes:
+  postgres_data:
