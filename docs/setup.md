@@ -6,7 +6,7 @@ This guide explains the current repository structure, how to run the project, ho
 
 Training Tracker is intended to help record training activity, store routines, and follow progression across different disciplines.
 
-The current code includes a React frontend, a FastAPI backend, PostgreSQL storage, and an `Exercise` model. It does not yet implement the complete training tracker product.
+The current code includes a React frontend, a FastAPI backend, PostgreSQL storage, and email and password authentication. It does not yet implement the complete training tracker product.
 
 ### Implemented
 
@@ -15,16 +15,18 @@ The current code includes a React frontend, a FastAPI backend, PostgreSQL storag
 - PostgreSQL database connection through SQLAlchemy.
 - Environment-based database configuration.
 - Psycopg 3 connection support for Railway PostgreSQL URLs.
-- Automatic creation of SQLAlchemy tables when the backend starts.
+- Alembic migrations, which own the database schema.
 - Basic API root and health endpoints.
-- Initial `Exercise` database model.
-- Initial create and list exercise endpoints.
+- User accounts with scrypt password hashing.
+- Server-side sessions delivered in an httpOnly cookie.
+- Signup, login, logout, and current-user endpoints.
+- A sign-in and sign-up screen, and session restore on page load.
+- A backend test suite covering the authentication endpoints.
 - Local PostgreSQL service through Docker Compose.
 - Frontend and backend deployed as separate Railway services.
 
 ### Not implemented yet
 
-- User accounts or authentication.
 - Friends, teams, or shared training groups.
 - Workout templates or saved routines.
 - Creating a workout while training.
@@ -41,18 +43,39 @@ These should be added in separate feature slices after the current foundation is
 ```text
 training-tracker/
 ├── backend/
+│   ├── alembic/
+│   │   ├── versions/
+│   │   └── env.py
 │   ├── app/
+│   │   ├── authentication/
+│   │   │   ├── __init__.py
+│   │   │   ├── auth.py
+│   │   │   ├── models.py
+│   │   │   ├── schemas.py
+│   │   │   └── security.py
 │   │   ├── __init__.py
+│   │   ├── composition.py
 │   │   ├── database.py
 │   │   ├── main.py
 │   │   └── models.py
+│   ├── tests/
+│   │   ├── conftest.py
+│   │   ├── test_auth.py
+│   │   └── test_composition.py
+│   ├── alembic.ini
+│   ├── pytest.ini
+│   ├── run_tests.sh
 │   └── requirements.txt
 ├── frontend/
 │   ├── public/
 │   ├── src/
 │   │   ├── assets/
+│   │   ├── api.js
 │   │   ├── App.css
 │   │   ├── App.jsx
+│   │   ├── auth.jsx
+│   │   ├── authContext.js
+│   │   ├── AuthForm.jsx
 │   │   ├── index.css
 │   │   └── main.jsx
 │   ├── .env
@@ -75,15 +98,27 @@ training-tracker/
 
 ### Backend files
 
-- `backend/app/main.py` creates the FastAPI application, configures CORS, initializes database tables, and defines the current API endpoints.
+- `backend/app/main.py` creates the FastAPI application, configures CORS from `CORS_ORIGINS`, and registers `composition.router`.
 - `backend/app/database.py` loads environment variables, reads `DATABASE_URL`, selects the Psycopg 3 SQLAlchemy driver when needed, creates the database engine, and provides database sessions to API handlers.
-- `backend/app/models.py` contains the SQLAlchemy models. The current model is `Exercise`.
+- `backend/app/models.py` contains the domain models — currently just `Person`. Nothing auth-specific lives here.
+- `backend/app/composition.py` is the only file that imports both `app.authentication` and `app.models`, **and it is where every endpoint lives** — `app/authentication/` defines no routes at all, only plain functions. Every route handler (`/auth/signup`, `/auth/login`, `/auth/logout`, `/user`) calls into `app.authentication.auth`'s functions; `signup_endpoint` and `user_endpoint` additionally touch `Person` directly (creating it, or joining it in), since each has exactly one caller and isn't worth a separate function.
+- `backend/app/authentication/` is a self-contained module that knows only about `users` and `sessions`, not about people or workouts, and defines no HTTP endpoints:
+  - `models.py` — the `User` and `AuthSession` SQLAlchemy models.
+  - `security.py` — hashes and verifies passwords using `hashlib.scrypt` from the standard library.
+  - `auth.py` — plain functions: `create_user`, `authenticate_user`, `create_session`/`verify_session`/`revoke_session`, and the `require_auth` dependency that protected endpoints depend on.
+  - `schemas.py` — the Pydantic request bodies (`SignupBody`, `LoginBody`).
+- `backend/alembic/` contains the migrations that create and change the database schema.
+- `backend/tests/` contains the test suite, and `run_tests.sh` runs it.
 - `backend/requirements.txt` lists the Python dependencies used by the backend.
 
 ### Frontend files
 
-- `frontend/src/main.jsx` is the JavaScript entry point and mounts the React application.
-- `frontend/src/App.jsx` contains the current top-level React page and backend status request.
+- `frontend/src/main.jsx` is the JavaScript entry point and mounts the React application inside the authentication provider.
+- `frontend/src/App.jsx` is the top-level page. It shows the sign-in form when logged out and a placeholder shell when logged in.
+- `frontend/src/AuthForm.jsx` is the combined sign-in and sign-up form.
+- `frontend/src/auth.jsx` holds the current user, and calls the backend to log in, sign up, and log out.
+- `frontend/src/authContext.js` contains the auth context and the `useAuth` hook.
+- `frontend/src/api.js` wraps `fetch`, sets the API base URL, sends the session cookie, and turns error responses into exceptions.
 - `frontend/src/App.css` contains component-level styles.
 - `frontend/src/index.css` contains global styles.
 - `frontend/public/` contains public assets copied into the built frontend.
@@ -129,15 +164,36 @@ DATABASE_URL=postgresql://postgres:password@localhost:5432/training_tracker
 
 The local value must match the PostgreSQL service configured in `docker-compose.yml`.
 
-### Database initialization
+### Database migrations
 
-When the backend imports, `main.py` currently runs:
+The schema is owned by Alembic. The application no longer creates tables when it
+starts, so a fresh database needs:
 
-```python
-Base.metadata.create_all(bind=engine)
+```bash
+cd backend
+alembic upgrade head
 ```
 
-This creates tables that do not exist. It means the database must be reachable when the backend starts. This is acceptable for the current prototype, but a future production-ready version should use Alembic migrations instead of relying on import-time table creation.
+Alembic reads the same `DATABASE_URL` as the application: `alembic/env.py` imports
+it from `app.database`, so the connection is configured in one place and
+`alembic.ini` holds no database URL. It also imports `app.composition` rather than
+either model module directly — that one import pulls in both `app.models`
+(`Person`) and `app.authentication.models` (`User`, `AuthSession`), so every table
+registers on `Base.metadata` regardless of which module it's declared in.
+
+After changing a model — `backend/app/models.py` or
+`backend/app/authentication/models.py` — generate a migration and apply it:
+
+```bash
+alembic revision --autogenerate -m "short description"
+alembic upgrade head
+```
+
+Always read the generated file before applying it. Autogenerate detects most
+changes but not all of them.
+
+On Railway, run `alembic upgrade head` as the backend service's pre-deploy command,
+so a failed migration fails the deployment instead of starting a broken release.
 
 ### Current API endpoints
 
@@ -146,24 +202,63 @@ This creates tables that do not exist. It means the database must be reachable w
 | `GET` | `/` | Confirms that the API is running. |
 | `GET` | `/health` | Returns the current health response. |
 | `GET` | `/docs` | Opens FastAPI's interactive Swagger documentation. |
-| `GET` | `/exercises` | Returns exercises stored in the database. |
-| `POST` | `/exercises?name=...` | Attempts to create an exercise using the supplied name. |
-
-The current exercise endpoint is only an initial scaffold. The `Exercise` model also contains `discipline` and `metric_type`, so the create endpoint needs to be expanded before exercise creation is considered complete.
+| `POST` | `/auth/signup` | Creates a user and a person, and starts a session. Returns `409` if the email is taken. |
+| `POST` | `/auth/login` | Starts a session. Returns `401` for a wrong email or password. |
+| `POST` | `/auth/logout` | Revokes the current session and clears the cookie. |
+| `GET` | `/user` | Returns the signed-in user: `{id, email, name}`. Returns `401` when not signed in. |
 
 The health endpoint currently returns `{"database": true}`. It is a basic response and should later perform an actual database query and return a clear status when the database is unavailable.
+
+### Authentication
+
+Login creates a row in the `sessions` table and returns a random token in a cookie.
+The table stores only a SHA-256 hash of that token, so a leaked table does not hand
+out working logins. Passwords are hashed with `hashlib.scrypt`.
+
+The cookie is set `HttpOnly` (JavaScript cannot read it), `Secure` (HTTPS only), and
+`SameSite=Lax`. Because JavaScript cannot read the cookie, the frontend calls
+`GET /user` on page load to find out whether it is signed in.
+
+Endpoints that need a signed-in user depend on `require_auth`, which returns the
+user id or raises `401`:
+
+```python
+@router.get("/example")
+def example(user_id: int = Depends(require_auth)):
+    ...
+```
+
+`SameSite=Lax` is also the reason both services must sit under one custom domain.
+See section 6.
+
+`GET /user` lives in `app/composition.py`, not `app/authentication/` — that
+module defines no endpoints at all, just the plain functions `user_endpoint`
+calls into (`require_auth`). It joins `User` and `Person` directly for the
+`name` the frontend displays — a one-off join, not worth its own named
+function for a single caller. An earlier pass also had a pure
+`app.authentication`-only `/auth/me` (`{id, email}`, no `Person`) alongside
+this one; it was removed as redundant for an app with a single frontend
+consumer — nothing needed "logged in, but no name" as a separate case. If
+that need shows up later (a consumer that must stay ignorant of the domain
+schema), a small `get_auth_identity()` wrapping `db.get(User, user_id)` is
+the way back in.
 
 ## 4. Frontend Design
 
 The frontend is a Vite-powered React application. `frontend/src/main.jsx` mounts `App.jsx` into the `root` element in `frontend/index.html`.
 
-The current page renders:
+`AuthProvider` in `src/auth.jsx` calls `GET /user` once when the application
+loads. While that request is in flight the page renders nothing; afterwards it
+renders either the sign-in form or the signed-in shell. Signing in or signing up
+re-fetches the user, so the shell appears without a page reload.
 
-- The `Training Tracker` heading.
-- A backend status label.
-- A request to the backend health endpoint.
+Every request goes through `api()` in `src/api.js`, which sets
+`credentials: "include"`. Without it the browser would neither store nor send the
+session cookie, and every request would be anonymous.
 
-The frontend is currently a status shell, not a workout management interface. Before Railway deployment, the API request should use the build-time `VITE_API_URL` variable rather than a hard-coded localhost address:
+The frontend is otherwise still a shell, not a workout management interface. The API
+base URL comes from the build-time `VITE_API_URL` variable rather than a hard-coded
+address:
 
 ```text
 VITE_API_URL=https://YOUR-BACKEND-DOMAIN
@@ -211,18 +306,28 @@ Use `docker compose down -v` only when you intentionally want to delete the loca
 From the repository root:
 
 ```bash
+python -m venv .venv
+source .venv/bin/activate
+pip install -r backend/requirements.txt
 cd backend
-python -m venv venv
-source venv/bin/activate
-pip install -r requirements.txt
+alembic upgrade head
 uvicorn app.main:app --reload
 ```
 
 The API is available at:
 
-- `http://127.0.0.1:8000/`
-- `http://127.0.0.1:8000/health`
-- `http://127.0.0.1:8000/docs`
+- `http://localhost:8000/`
+- `http://localhost:8000/health`
+- `http://localhost:8000/docs`
+
+Use `localhost` rather than `127.0.0.1`. The browser treats the two as different
+sites, so a session cookie set by one is not sent from a page served by the other,
+and every request after signing in would be anonymous. `frontend/.env` should
+therefore contain:
+
+```env
+VITE_API_URL=http://localhost:8000
+```
 
 On Windows PowerShell, activate the virtual environment with:
 
@@ -243,6 +348,20 @@ npm run dev
 The Vite development server normally runs at:
 
 `http://localhost:5173/`
+
+### Backend tests
+
+```bash
+cd backend
+./run_tests.sh
+```
+
+The tests run against an in-memory SQLite database, so PostgreSQL does not need to
+be running and the local database is never touched. `tests/conftest.py` swaps the
+`get_db` dependency for a test session, and uses an `https` test client so the
+`Secure` session cookie is kept.
+
+Pass any pytest arguments through the script, for example `./run_tests.sh -k login`.
 
 ### Frontend checks
 
@@ -271,6 +390,9 @@ npm run preview -- --host 0.0.0.0 --port 4173
 
 The project uses two Railway application services connected to the same GitHub repository, plus a Railway PostgreSQL service.
 
+Both application services must be reachable through subdomains of one custom
+domain. This is a requirement, not a preference — see "Custom domain" below.
+
 ### PostgreSQL service
 
 Create a PostgreSQL service in the Railway project. Railway provides a `DATABASE_URL` variable for it.
@@ -284,13 +406,20 @@ Configure the backend Railway service as follows:
 - Repository: the training-tracker GitHub repository.
 - Root directory: `/backend`.
 - Build command: `pip install -r requirements.txt`.
+- Pre-deploy command: `alembic upgrade head`.
 - Start command: `uvicorn app.main:app --host 0.0.0.0 --port $PORT`.
 
-Add this variable to the backend service:
+Add these variables to the backend service:
 
 ```text
 DATABASE_URL=${{Postgres.DATABASE_URL}}
+CORS_ORIGINS=https://app.yourdomain.com
 ```
+
+`CORS_ORIGINS` is the exact origin of the frontend, including the scheme and with
+no trailing slash. Several origins can be given, separated by commas. If it is not
+set, only `http://localhost:5173` is allowed and the deployed frontend cannot call
+the API.
 
 Use the actual PostgreSQL service name in place of `Postgres`. Railway's internal hostname can be used between services in the same project.
 
@@ -322,15 +451,43 @@ Use the public backend domain and include only one `https://` prefix.
 
 Changing a `VITE_*` variable requires a new frontend build because the value is compiled into the JavaScript bundle.
 
+### Custom domain
+
+The generated `*.up.railway.app` domains cannot carry a logged-in session. Railway
+lists `up.railway.app` on the Public Suffix List, so the browser treats
+`frontend-x.up.railway.app` and `backend-y.up.railway.app` as separate sites. The
+session cookie is `SameSite=Lax`, and a browser refuses to store such a cookie that
+arrives from another site. Signing in returns `200`, no cookie is kept, and every
+following request is anonymous. Nothing in the code can work around this.
+
+Putting both services under one registrable domain fixes it:
+
+- `app.yourdomain.com` for the frontend service.
+- `api.yourdomain.com` for the backend service.
+
+Both are then the same site, and the cookie behaves as intended.
+
+For each service, open **Settings → Networking → Public Networking → Custom
+Domain**, enter the subdomain, and add the **CNAME and TXT records** Railway
+displays. Both records are required. Railway issues and renews the TLS certificate
+automatically.
+
+Use subdomains rather than the bare domain. An apex domain cannot hold a CNAME in
+ordinary DNS and needs provider-specific ALIAS or ANAME support.
+
+If DNS is hosted on Cloudflare, check Railway's current guidance before enabling
+the proxy, as proxying can interfere with certificate issuance.
+
 ### CORS
 
-The backend currently allows the local frontend origin `http://localhost:5173`. For a deployed frontend, the backend must also allow the exact public frontend Railway origin, for example:
+CORS and the cookie rules above are separate checks, and both have to pass. CORS
+decides whether the frontend's JavaScript may read the response; `SameSite` decides
+whether the browser keeps and sends the cookie at all. Correct CORS with a
+cross-site cookie still leaves every request anonymous.
 
-```text
-https://YOUR-FRONTEND-DOMAIN
-```
-
-If this is not configured, the backend may be reachable directly while browser requests from the frontend are rejected by CORS.
+The backend allows the origins in `CORS_ORIGINS`, defaulting to
+`http://localhost:5173`. Credentials are enabled, which is why the origin has to be
+listed exactly — a wildcard is not permitted for credentialed requests.
 
 ### Railway troubleshooting
 
@@ -339,7 +496,7 @@ If the frontend is blank:
 1. Open the frontend deployment logs and confirm a process is listening on `0.0.0.0:$PORT`.
 2. Open browser developer tools and check whether JavaScript assets return `200`.
 3. Confirm assets are requested from `/assets/`, not `/training-tracker/assets/`.
-4. Confirm the browser API request targets the backend Railway domain, not `127.0.0.1` or `localhost`.
+4. Confirm the browser API request targets the backend custom domain (`api.yourdomain.com`), not `127.0.0.1`, `localhost`, or the generated `*.up.railway.app` domain.
 
 If the backend fails during startup:
 
@@ -348,6 +505,16 @@ If the backend fails during startup:
 3. Confirm `DATABASE_URL` exists in the backend service variables.
 4. Confirm the PostgreSQL service is in the same Railway project.
 5. Check that the deployment installed the current `requirements.txt` containing `psycopg`.
+6. Check the pre-deploy logs for a failed `alembic upgrade head`.
+
+If signing in appears to succeed but the user is immediately signed out again:
+
+1. Confirm both services are being used through the custom domain, not the
+   generated `*.up.railway.app` domains.
+2. In the browser's developer tools, check whether a `session` cookie was stored
+   for the API subdomain after signing in. If not, the domains are not same-site.
+3. Confirm `CORS_ORIGINS` matches the frontend origin exactly.
+4. Confirm the frontend was rebuilt after `VITE_API_URL` was changed.
 
 ## 7. GitHub Collaboration
 

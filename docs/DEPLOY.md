@@ -9,12 +9,19 @@ have yet.
 
 ## 1. What Railway hosts
 
-One Railway **project**, two services in it:
+One Railway **project**, three services in it:
 
-- **web** — the FastAPI app, built and deployed straight from this repo.
+- **backend** — the FastAPI app (service root `/backend`), built and deployed
+  straight from this repo.
+- **frontend** — the React/Vite app (service root `/frontend`), built with
+  `npm ci && npm run build` and served by `npm run preview`.
 - **Postgres** — a Railway-managed plugin. Same schema as
   [ARCHITECTURE.md](ARCHITECTURE.md) / [AUTH.md](AUTH.md), nothing
   Railway-specific about it.
+
+The two app services must be reached through subdomains of one custom domain
+or logged-in sessions do not work at all — see §4, which is now a requirement
+rather than the "add it later" it used to be.
 
 ```
 git push origin main
@@ -56,10 +63,17 @@ not in the repo:
   references the Postgres plugin's connection string directly
   (`${{Postgres.DATABASE_URL}}` as a service variable), so it rotates
   automatically if the DB's credentials ever change.
-- **Nothing else is required for auth.** The session design in
+- **No secret is required for auth.** The session design in
   [AUTH.md](AUTH.md) uses a random opaque token looked up in the `sessions`
   table — it's never signed, so there's no `SECRET_KEY` to provision or
   rotate. One less secret to manage.
+- `CORS_ORIGINS` — on the backend service, the frontend's exact origin
+  (`https://app.<domain>`, no trailing slash; comma-separated for several).
+  Defaults to `http://localhost:5173`, so the deployed frontend can't call the
+  API until this is set.
+- `VITE_API_URL` — on the frontend service, `https://api.<domain>`. Vite bakes
+  it into the bundle at build time, so changing it needs a rebuild, not just a
+  restart.
 - Railway terminates TLS at its edge for every deploy, including the
   default `*.up.railway.app` domain — the `secure=True` cookie flag from
   AUTH.md works without extra setup.
@@ -72,12 +86,39 @@ than discovering it as a first-deploy failure.
 
 ---
 
-## 4. Domains
+## 4. Domains — required, not optional
 
-Railway issues a free `*.up.railway.app` subdomain automatically. Attach a
-real domain later under **Settings → Networking → Custom Domain** — a CNAME
-record, TLS is handled for you. Not needed to go live; add when there's a
-domain to point.
+Railway issues a free `*.up.railway.app` subdomain per service, and for this
+app **they are not usable together**. Railway lists `up.railway.app` on the
+[Public Suffix List](https://publicsuffix.org/), so a browser treats
+`frontend-x.up.railway.app` and `backend-y.up.railway.app` as *separate
+sites*. The session cookie from [AUTH.md](AUTH.md) is `SameSite=Lax`, and a
+browser refuses to store such a cookie arriving from another site: login
+returns `200`, nothing is kept, every later request is anonymous. No code
+change fixes this — it's the browser enforcing the PSL.
+
+One registrable domain across both services fixes it:
+
+- `app.<domain>` → frontend service
+- `api.<domain>` → backend service
+
+Same registrable domain (`<domain>`) means same site, and `Lax` behaves as
+designed.
+
+Per service: **Settings → Networking → Public Networking → Custom Domain**,
+then add the **CNAME *and* TXT records** Railway displays — both are required.
+TLS is issued and renewed automatically. Use subdomains, not the apex: an apex
+domain can't hold a CNAME in ordinary DNS and needs provider-specific
+ALIAS/ANAME support. On Cloudflare, check Railway's current guidance before
+enabling the orange-cloud proxy.
+
+`ponytail: a ~$10/yr domain instead of collapsing to one service and writing
+build config — DNS does the work.`
+
+A native mobile app, if it happens, is unaffected by any of this (`SameSite`
+is a browser rule), but benefits from the same domain: a shipped binary
+pointing at `api.<domain>` survives moving off Railway, one pointing at a
+generated hostname doesn't.
 
 ---
 

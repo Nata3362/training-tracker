@@ -10,6 +10,20 @@ Nothing in this module knows what a workout is. It only knows `users` and
 `sessions`. The workout tracker plugs into it at two points — noted where they
 come up below.
 
+**As built**, "the module" is a real package, `backend/app/authentication/`,
+that never imports `Person` *and defines no HTTP endpoints* — the code
+samples below read as one file with routes for clarity, but the plain
+functions map onto `authentication/models.py`, `security.py`, and `auth.py`,
+while every route (including the ones with no `Person` involvement at all,
+like login) lives in `backend/app/composition.py`. That file is `signup()`'s
+"app hook" from §5 made literal, and it's the only place that imports both
+`app.authentication` and `app.models`. The identity endpoint is `GET /user`,
+not `/me` as sampled in an earlier design pass; the real handler also inlines
+the `User`/`Person` join directly rather than through a separate
+`get_identity()` function, since it has exactly one caller — §5's sample
+keeps the split for readability. See [docs/setup.md](setup.md) §2 for the
+current file map.
+
 ---
 
 ## 1. The approach, and what it's not
@@ -247,6 +261,19 @@ def logout(response: Response, session: str | None = Cookie(default=None), db: D
     return {"ok": True}
 
 
+# --- outside the module: the app hook, made literal --------------------------
+
+def get_identity(db: DBSession, user_id: int) -> dict:
+    user = db.get(User, user_id)
+    person = db.scalar(select(Person).where(Person.user_id == user_id))
+    return {"id": user.id, "email": user.email, "name": person.name}
+
+
+@app.get("/user")
+def user(user_id: int = Depends(require_auth), db: DBSession = Depends(get_db)):
+    return get_identity(db, user_id)
+
+
 # --- an existing route from ARCHITECTURE.md, now protected ------------------
 
 @app.get("/workouts/today")
@@ -254,6 +281,38 @@ def get_todays_workout(user_id: int = Depends(require_auth), db: DBSession = Dep
     person = db.scalar(select(Person).where(Person.user_id == user_id))
     return load_workout(db, person)   # domain function from ARCHITECTURE.md §4
 ```
+
+**`/user` is what makes a browser frontend possible at all.** `httponly`
+means JS can't read the cookie, so "am I logged in?" can only be answered by
+asking the server. The frontend calls it once on load and treats a `401` as
+logged out — without it, a page refresh (which wipes all client state but
+keeps the cookie) would show the login form to someone already logged in. It
+joins `User` and `Person`, since a display name has to come from somewhere.
+
+`/user` isn't defined *inside* the module, though — the module exposes plain
+functions only, no FastAPI routes at all. It lives in the composition file
+(`app/composition.py` in this codebase), which is the "app hook" from §2 and
+§5's `signup()` made literal, not just commented: nothing under
+`app/authentication/` imports `Person`, or decides an HTTP path or status
+code. A different project reusing this module gets
+`create_user`/`authenticate_user`/`require_auth` for free and writes a
+handful of one-line route wrappers around them, plus its own identity join
+for whatever "owning" table it wired up in §2.
+
+*(An earlier pass also had a pure, `Person`-free `/auth/me` inside the same
+composition file, for a consumer that needs "is this session valid" without a
+name. Dropped as redundant here — one frontend, one consumer, no reason yet
+to keep two identity endpoints. Worth resurrecting if a second consumer shows
+up that must stay ignorant of the domain schema.)*
+
+**`/user`'s id is not for the frontend to send back.** The frontend
+holds `person_id` (from `/user`) for display and for comparing against
+multi-person data it already has (e.g. bolding "your" row in a shared `/prs`
+list) — never as a parameter to ask for data
+(`/workouts/today?person_id=…`), which would let anyone read another
+person's log by editing a number. Protected routes derive the person from
+the cookie themselves, exactly as `get_todays_workout` does above — the
+client presents a cookie, never a claim about who it is.
 
 What `Depends(require_auth)` buys: FastAPI runs `require_auth` **before**
 `get_todays_workout`'s body. If the cookie is missing or the session's
@@ -270,6 +329,17 @@ routes is the "wraps every protected route" arrow in the diagram.
 - **Cookie flags**: `httponly` (JS can't read it — blocks token theft via
   XSS), `secure` (HTTPS only), `samesite=lax` (blocks it being sent on
   cross-site POSTs — basic CSRF protection for free).
+- **`samesite=lax` constrains deployment**, which is easy to miss until it
+  silently breaks: the frontend and the API must be the *same site* (one
+  registrable domain), or the browser won't even store the cookie the login
+  response sets. Two `*.up.railway.app` services are *not* same-site —
+  Railway is on the Public Suffix List. Hence `app.<domain>` +
+  `api.<domain>`; see [DEPLOY.md](DEPLOY.md) §4. Locally the same rule
+  applies: use `localhost` for both, never `localhost` for one and
+  `127.0.0.1` for the other.
+- **CORS is a separate gate.** `allow_credentials=True` plus the exact origin
+  (never `*`) lets the frontend *read* the response; `SameSite` decides
+  whether the cookie is stored and sent at all. Both must pass.
 - **Session cleanup**: expired rows aren't deleted automatically. Either a
   daily job running
   `db.execute(delete(AuthSession).where(AuthSession.expires_at < datetime.now(timezone.utc)))`,
