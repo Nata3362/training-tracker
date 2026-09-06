@@ -8,23 +8,33 @@ The repository currently contains the initial application foundation:
 - A React frontend built with Vite.
 - Local PostgreSQL development through Docker Compose.
 - Separate Railway services for the frontend and backend.
-- A basic frontend page that checks the backend health endpoint.
-- An initial `Exercise` database model and exercise API endpoints.
+- Email and password authentication using server-side sessions in an httpOnly cookie.
+- A sign-in and sign-up screen on the frontend.
+- Alembic database migrations and a backend test suite.
 
-Workout routines, performed workout logging, progression analytics, dashboards, authentication, and user accounts are planned but are not implemented yet.
+Workout routines, performed workout logging, progression analytics, and dashboards are planned but are not implemented yet.
 
 ## Project Structure
 
 ```text
 backend/
 	app/
-		database.py   Database engine, sessions, and environment loading
-		main.py       FastAPI application and API endpoints
-		models.py     SQLAlchemy database models
+		database.py     Database engine, sessions, and environment loading
+		main.py         FastAPI application, CORS, and router registration
+		models.py       Domain models (Person) — nothing auth-specific
+		composition.py  Wires auth + Person together, hosts every /auth/* and /user endpoint
+		authentication/ Self-contained auth module — see below
+	alembic/        Database migrations
+	tests/          Backend test suite
+	run_tests.sh    Runs the backend tests
 	requirements.txt
 frontend/
 	src/
-		App.jsx       Main React component
+		App.jsx       Top-level component, switches on auth state
+		AuthForm.jsx  Sign-in and sign-up form
+		auth.jsx      AuthProvider, holds the current user
+		authContext.js  Auth context and the useAuth hook
+		api.js        fetch wrapper that sends the session cookie
 		main.jsx      React entry point
 		*.css         Frontend styling
 	package.json    Frontend scripts and dependencies
@@ -44,12 +54,16 @@ docker compose up -d database
 Start the backend in a separate terminal:
 
 ```bash
+python -m venv .venv
+source .venv/bin/activate
+pip install -r backend/requirements.txt
 cd backend
-python -m venv venv
-source venv/bin/activate
-pip install -r requirements.txt
+alembic upgrade head
 uvicorn app.main:app --reload
 ```
+
+`alembic upgrade head` creates the database tables. It is required on a fresh
+database — the application no longer creates tables on startup.
 
 Start the frontend in another terminal:
 
@@ -59,7 +73,10 @@ npm ci
 npm run dev
 ```
 
-The local application uses the frontend at `http://localhost:5173` and the API at `http://127.0.0.1:8000`.
+The local application uses the frontend at `http://localhost:5173` and the API at `http://localhost:8000`.
+
+Use `localhost` for the API, not `127.0.0.1`. The browser treats them as different
+sites, and the session cookie would be dropped.
 
 See [docs/setup.md](docs/setup.md) for the complete file explanation, local setup, Railway configuration, available endpoints, and current limitations.
 
@@ -71,6 +88,11 @@ npm run lint
 npm run build
 ```
 
+```bash
+cd backend
+./run_tests.sh
+```
+
 ## Deployment
 
 Railway uses two services from this repository:
@@ -78,4 +100,10 @@ Railway uses two services from this repository:
 - Frontend service root: `/frontend`
 - Backend service root: `/backend`
 
-The backend needs a Railway PostgreSQL `DATABASE_URL`. The frontend needs the public backend URL in `VITE_API_URL`. Detailed Railway instructions are in [docs/setup.md](docs/setup.md).
+The backend needs a Railway PostgreSQL `DATABASE_URL` and the allowed frontend origin in `CORS_ORIGINS`. The frontend needs the public backend URL in `VITE_API_URL`.
+
+Both services must be served from subdomains of one custom domain, for example
+`app.yourdomain.com` and `api.yourdomain.com`. The generated `*.up.railway.app`
+domains do not work for a logged-in session, because they count as separate sites
+and the browser discards the session cookie. Detailed Railway instructions are in
+[docs/setup.md](docs/setup.md).

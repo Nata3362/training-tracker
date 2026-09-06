@@ -1,13 +1,13 @@
 # Architecture: from Sheet to webapp
 
 Target stack: **Python (FastAPI) + PostgreSQL via SQLAlchemy** for the
-backend/data layer; the frontend framework is left open (see
-[Views](#4-view-layer) — a plain server-rendered page works fine for two
-users and keeps a phone-first app close by later).
+backend/data layer, **React + Vite** for the frontend (see §6).
 
-No database exists yet — this is still a design, not a running schema. The
-models below are what gets created from scratch, not a migration path, so
-there's nothing here about altering existing tables.
+Partly built since this was written: auth ([AUTH.md](AUTH.md)) exists, so the
+database now holds `users`, `sessions`, and a minimal `people` — created by
+Alembic, which owns the schema from here on. The rest of the models below are
+still a design. They arrive as further migrations rather than the from-scratch
+creation this doc originally assumed.
 
 This document maps the current Apps Script prototype (`Code.gs`, described in
 full in [README.md](README.md) see old folder) onto four layers — **Data → Domain → API →
@@ -65,9 +65,10 @@ view backed by a query.
 ## 3. Data layer — proposed schema
 
 SQLAlchemy 2.0-style declarative models — this is the target schema, created
-fresh (`Base.metadata.create_all()` or a first Alembic revision once the
-project's ready for that), not a migration against something that already
-exists.
+fresh, not a migration against something that already exists. Alembic now owns
+the schema: its first revision created `users`, `sessions`, and `people`, and
+the models below join by the same route (`alembic revision --autogenerate`),
+not by `create_all()`.
 
 ```python
 from datetime import date, datetime
@@ -217,22 +218,27 @@ Screens, mapped from the tabs that turned out to be pure view:
   similar) — the prototype's manual `Insert > Chart` step goes away for
   free once the aggregation is server-side.
 
-Framework: not decided — you picked Python/Postgres for the backend, not a
-frontend framework. For two users and mobile-first logging, a
-server-rendered page (Jinja2 + a sprinkle of HTMX/vanilla JS for the
-add-set/swap interactions) is the lazy option: no build step, no SPA
-state-management library, and it's the smallest thing that satisfies
-"mobile primary, desktop for planning." A full SPA (React/Vue) is the
-upgrade if the "later, an app" turns into a shared component layer with a
-future native app.
-`ponytail: recommending server-rendered + HTMX over a SPA framework; upgrade to a SPA if you end up sharing view logic with a native app.`
+Framework: **React + Vite**, deployed as its own Railway service. This section
+originally argued for server-rendered Jinja2 + HTMX as the lazier option —
+that's superseded. React was chosen and is deployed, and a native mobile app
+is under consideration, which is the case where a JSON API with a separate
+client layer earns its keep rather than costing.
+
+Auth is the only view-layer work done so far: `AuthProvider` holds the
+current user, `GET /user` restores the session on load, and `App.jsx`
+switches between the sign-in form and the app shell. No router yet — it
+earns its place with the second screen, not before.
+`ponytail: no react-router for a single screen; add it with the second one.`
 
 ---
 
 ## 7. First steps, in order
 
+0. ~~Auth~~ — done ahead of this list ([AUTH.md](AUTH.md)): `users`,
+   `sessions`, and a minimal `Person` exist, along with the sign-in frontend.
+   `Person` still needs the rest of its columns below.
 1. SQLAlchemy models above (`Person`, `Exercise`, `PlanExercise`, `Target`,
-   `LogSet`), `Base.metadata.create_all()` against a fresh Postgres instance,
+   `LogSet`) as an Alembic revision against the existing schema,
    + seed data ported from `Exercises`/`Plans` starters in `Code.gs`.
 2. Domain functions (`resolve_target`, `apply_progression`, the three
    compute functions) with the self-check tests the logic deserves — these
@@ -248,10 +254,11 @@ future native app.
 
 ## 8. Open questions
 
-- **Auth.** Two named users, no login in the prototype (tab = identity).
-  The webapp needs *some* way to know who's logging — even HTTP basic auth
-  or a hardcoded person-picker is enough for two people; say if you want
-  more than that.
+- **Auth.** ~~Open.~~ Resolved and built: email/password with server-side
+  sessions ([AUTH.md](AUTH.md)). `Person.user_id` is the wire between a login
+  and a person row. One constraint fell out of deploying it — the frontend and
+  API must sit under one registrable domain, or the browser discards the
+  session cookie ([DEPLOY.md](DEPLOY.md) §4).
 - **Session as an entity.** Prototype derives `session_id` from
   `date + person initials` and treats it as a string, not a table. Proposed
   schema keeps that. If you want to rename/delete/annotate a whole session
