@@ -1,22 +1,21 @@
-import { useEffect, useState } from "react";
+import "./App.css";
+
+import AuthForm from "./AuthForm";
+import { useAuth } from "./authContext";
 
 function App() {
-  const [message, setMessage] = useState("");
+	const { user, loading, logout } = useAuth();
 
-  useEffect(() => {
-    fetch("http://127.0.0.1:8000/health")
-      .then((response) => response.json())
-      .then((data) => {
-        setMessage(data.status);
-      });
-  }, []);
+	if (loading) return null;
+	if (!user) return <AuthForm />;
 
-  return (
-    <div>
-      <h1>Training Tracker</h1>
-      <p>Backend status: {message}</p>
-    </div>
-  );
+	return (
+		<div id="center">
+			<h1>Training Tracker</h1>
+			<p>Signed in as {user.name ?? user.email}</p>
+			<button onClick={logout}>Log out</button>
+		</div>
+	);
 }
 
 export default App;
