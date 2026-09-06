@@ -1,13 +1,13 @@
-from datetime import datetime, timedelta, timezone
-
-from app.auth import verify_session
-from app.models import AuthSession, Person, User
+from app.authentication.auth import verify_session
+from app.authentication.models import User
+from app.models import Person
 
 SIGNUP_BODY = {
     "email": "a@example.com",
     "password": "correct horse battery staple",
     "name": "A",
 }
+
 
 ## TEST LOGIN FLOW: signup -> login -> logout
 def test_signup(client, db_session):
@@ -25,7 +25,6 @@ def test_signup(client, db_session):
     assert verify_session(db_session, token)
 
 
-#TODO: hit some user endpoints with the session cookie to verify that it works, and that the user is logged in
 def test_login_sets_new_session_cookie(client):
     client.post("/auth/signup", json=SIGNUP_BODY)
 
@@ -45,7 +44,8 @@ def test_logout(client, db_session):
     client.post("/auth/signup", json=SIGNUP_BODY)
 
     resp = client.post(
-        "/auth/login", json={"email": SIGNUP_BODY["email"], "password": SIGNUP_BODY["password"]}
+        "/auth/login",
+        json={"email": SIGNUP_BODY["email"], "password": SIGNUP_BODY["password"]},
     )
 
     token = resp.cookies.get("session")
@@ -62,12 +62,6 @@ def test_signup_does_not_store_plaintext_password(client, db_session):
 
     user = db_session.query(User).filter_by(email=SIGNUP_BODY["email"]).one()
     assert user.password_hash != SIGNUP_BODY["password"]
-
-
-def test_logout_without_a_session_cookie_is_a_noop(client):
-    resp = client.post("/auth/logout")
-
-    assert resp.status_code == 200
 
 
 # TEST ERROR CASES

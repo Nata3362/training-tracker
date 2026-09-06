@@ -6,16 +6,35 @@ from fastapi import Cookie, Depends, HTTPException
 from sqlalchemy import delete, select
 from sqlalchemy.orm import Session as DBSession
 
-from .database import get_db
-from .models import AuthSession
+from ..database import get_db
+from .models import AuthSession, User
+from .security import hash_password, verify_password
 
 SESSION_TTL = timedelta(days=30)
+
+
+def create_user(db: DBSession, email: str, password: str) -> User:
+    if db.scalar(select(User).where(User.email == email)):
+        raise HTTPException(409, "Email already registered")
+    user = User(email=email, password_hash=hash_password(password))
+    db.add(user)
+    db.flush()  # assigns user.id without committing yet
+    return user
+
+
+def authenticate_user(db: DBSession, email: str, password: str) -> User:
+    user = db.scalar(select(User).where(User.email == email))
+    if user is None or not verify_password(password, user.password_hash):
+        raise HTTPException(401, "Invalid email or password")
+    return user
 
 
 def create_session(db: DBSession, user_id: int) -> str:
     # piggyback expired-row cleanup on login,
     # revisit if sessions table grows large
-    db.execute(delete(AuthSession).where(AuthSession.expires_at <= datetime.now(timezone.utc)))
+    db.execute(
+        delete(AuthSession).where(AuthSession.expires_at <= datetime.now(timezone.utc))
+    )
     token = secrets.token_urlsafe(32)
     token_hash = hashlib.sha256(token.encode()).hexdigest()
     db.add(
