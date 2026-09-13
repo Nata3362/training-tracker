@@ -1,3 +1,4 @@
+import uuid
 from datetime import datetime, timezone
 
 from sqlalchemy import ForeignKey
@@ -9,7 +10,6 @@ from ..database import Base
 class User(Base):
     __tablename__ = "users"
 
-    id: Mapped[int] = mapped_column(primary_key=True)
     email: Mapped[str] = mapped_column(unique=True)
     password_hash: Mapped[str]
     created_at: Mapped[datetime] = mapped_column(
@@ -19,10 +19,9 @@ class User(Base):
 
 class AuthSession(Base):
     __tablename__ = "sessions"
-
-    id: Mapped[int] = mapped_column(primary_key=True)
+    
     token_hash: Mapped[str] = mapped_column(unique=True, index=True)
-    user_id: Mapped[int] = mapped_column(
+    user_id: Mapped[uuid.UUID] = mapped_column(
         ForeignKey("users.id", ondelete="CASCADE"), index=True
     )
     created_at: Mapped[datetime] = mapped_column(

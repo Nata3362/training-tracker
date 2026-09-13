@@ -1,8 +1,11 @@
 import os
+import uuid
 
 from dotenv import load_dotenv
 from sqlalchemy import create_engine
 from sqlalchemy.orm import DeclarativeBase, sessionmaker
+from sqlalchemy.orm import Mapped, mapped_column
+from sqlalchemy import Uuid
 
 load_dotenv()
 
@@ -27,8 +30,7 @@ SessionLocal = sessionmaker(
 
 
 class Base(DeclarativeBase):
-    pass
-
+    id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=uuid.uuid4)
 
 def get_db():
     db = SessionLocal()
