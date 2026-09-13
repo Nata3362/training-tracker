@@ -5,6 +5,7 @@ signup and /user reach into Person, which is the one deliberate crossing; login 
 logout don't touch Person at all but are exposed here anyway, since nothing under
 app/authentication/ defines routes.
 """
+import uuid
 
 from fastapi import APIRouter, Cookie, Depends, Response
 from sqlalchemy import select
@@ -62,7 +63,7 @@ def logout_endpoint(
 
 
 @router.get("/user")
-def user_endpoint(user_id: int = Depends(require_auth), db: DBSession = Depends(get_db)):
+def user_endpoint(user_id: uuid.UUID = Depends(require_auth), db: DBSession = Depends(get_db)):
     user = db.get(User, user_id)
     person = db.scalar(select(Person).where(Person.user_id == user_id))
     return {"id": user.id, "email": user.email, "name": person.name}
