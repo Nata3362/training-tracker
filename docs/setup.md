@@ -124,7 +124,7 @@ training-tracker/
 - `frontend/public/` contains public assets copied into the built frontend.
 - `frontend/package.json` defines the npm scripts and frontend dependencies.
 - `frontend/package-lock.json` locks the exact npm dependency versions.
-- `frontend/vite.config.js` configures Vite and currently uses `/` as the production base path, which is suitable for a Railway domain.
+- `frontend/vite.config.js` configures Vite: `/` as the production base path, and `preview.allowedHosts` so the deployed preview server accepts the custom domain.
 
 ## 3. Backend Design
 
@@ -200,14 +200,17 @@ so a failed migration fails the deployment instead of starting a broken release.
 | Method | Path | Purpose |
 | --- | --- | --- |
 | `GET` | `/` | Confirms that the API is running. |
-| `GET` | `/health` | Returns the current health response. |
+| `GET` | `/health` | Runs `SELECT 1` and returns `{"database": true}`. |
 | `GET` | `/docs` | Opens FastAPI's interactive Swagger documentation. |
 | `POST` | `/auth/signup` | Creates a user and a person, and starts a session. Returns `409` if the email is taken. |
 | `POST` | `/auth/login` | Starts a session. Returns `401` for a wrong email or password. |
 | `POST` | `/auth/logout` | Revokes the current session and clears the cookie. |
 | `GET` | `/user` | Returns the signed-in user: `{id, email, name}`. Returns `401` when not signed in. |
 
-The health endpoint currently returns `{"database": true}`. It is a basic response and should later perform an actual database query and return a clear status when the database is unavailable.
+The health endpoint executes `SELECT 1` before replying `{"database": true}`, so
+it fails rather than reporting healthy when the database is unreachable. Railway
+uses it as the backend service's healthcheck path, which is why it has to touch
+the database: a release that can't reach Postgres must not take traffic.
 
 ### Authentication
 
@@ -261,12 +264,12 @@ base URL comes from the build-time `VITE_API_URL` variable rather than a hard-co
 address:
 
 ```text
-VITE_API_URL=https://YOUR-BACKEND-DOMAIN
+VITE_API_URL=https://api.natoli.dk
 ```
 
 Vite embeds this value during `npm run build`, so a new frontend deployment is required after changing it in Railway.
 
-The Vite base path is `/`. Railway serves the frontend at the root of its generated domain.
+The Vite base path is `/`. Railway serves the frontend at the root of its domain.
 
 ## 5. Local Development
 
@@ -390,8 +393,10 @@ npm run preview -- --host 0.0.0.0 --port 4173
 
 The project uses two Railway application services connected to the same GitHub repository, plus a Railway PostgreSQL service.
 
-Both application services must be reachable through subdomains of one custom
+Both application services must be reachable through one shared registrable
 domain. This is a requirement, not a preference — see "Custom domain" below.
+The deployed application lives at `https://www.natoli.dk`, the API at
+`https://api.natoli.dk`.
 
 ### PostgreSQL service
 
@@ -405,15 +410,21 @@ Configure the backend Railway service as follows:
 
 - Repository: the training-tracker GitHub repository.
 - Root directory: `/backend`.
-- Build command: `pip install -r requirements.txt`.
+
+The build command is inferred from `requirements.txt`. The start command,
+pre-deploy command and healthcheck path come from `backend/railway.json` in the
+repository, which overrides the dashboard — they do not need to be entered by
+hand:
+
 - Pre-deploy command: `alembic upgrade head`.
 - Start command: `uvicorn app.main:app --host 0.0.0.0 --port $PORT`.
+- Healthcheck path: `/health` (runs `SELECT 1`).
 
 Add these variables to the backend service:
 
 ```text
 DATABASE_URL=${{Postgres.DATABASE_URL}}
-CORS_ORIGINS=https://app.yourdomain.com
+CORS_ORIGINS=https://www.natoli.dk
 ```
 
 `CORS_ORIGINS` is the exact origin of the frontend, including the scheme and with
@@ -426,8 +437,8 @@ Use the actual PostgreSQL service name in place of `Postgres`. Railway's interna
 Generate a public domain for the backend. Test it with:
 
 ```bash
-curl https://YOUR-BACKEND-DOMAIN/health
-curl https://YOUR-BACKEND-DOMAIN/
+curl https://api.natoli.dk/health
+curl https://api.natoli.dk/
 ```
 
 The backend must listen on `0.0.0.0` and Railway's `$PORT`; otherwise Railway cannot route public traffic to it.
@@ -438,16 +449,24 @@ Configure the frontend Railway service as follows:
 
 - Repository: the same training-tracker GitHub repository.
 - Root directory: `/frontend`.
-- Build command: `npm ci && npm run build`.
-- Start command: `npm run preview -- --host 0.0.0.0 --port $PORT`.
+
+`npm ci && npm run build` is inferred from `package.json`, and the start command
+(`npm run preview`) comes from `frontend/railway.json`. The `preview` script
+itself binds `--host 0.0.0.0 --port ${PORT:-4173}`; both flags are required for
+Railway to route traffic to it, and the fallback keeps the script usable locally.
+
+`frontend/vite.config.js` also sets `preview.allowedHosts` to `['.natoli.dk']`.
+Vite's preview server rejects any request whose `Host` header is not listed,
+answering `Blocked request. This host is not allowed`, so the custom domain must
+be named there. The leading dot covers the apex and every subdomain.
 
 Add this variable to the frontend service:
 
 ```text
-VITE_API_URL=https://YOUR-BACKEND-DOMAIN
+VITE_API_URL=https://api.natoli.dk
 ```
 
-Use the public backend domain and include only one `https://` prefix.
+Include only one `https://` prefix.
 
 Changing a `VITE_*` variable requires a new frontend build because the value is compiled into the JavaScript bundle.
 
@@ -462,21 +481,36 @@ following request is anonymous. Nothing in the code can work around this.
 
 Putting both services under one registrable domain fixes it:
 
-- `app.yourdomain.com` for the frontend service.
-- `api.yourdomain.com` for the backend service.
+- `www.natoli.dk` for the frontend service.
+- `api.natoli.dk` for the backend service.
 
-Both are then the same site, and the cookie behaves as intended.
+Both are then the same site, and the cookie behaves as intended. They remain
+different *origins*, so CORS still applies — the two checks are independent.
 
 For each service, open **Settings → Networking → Public Networking → Custom
 Domain**, enter the subdomain, and add the **CNAME and TXT records** Railway
-displays. Both records are required. Railway issues and renews the TLS certificate
-automatically.
+displays. Both records are required; without the TXT record the domain resolves
+but returns `404`. Railway issues and renews the TLS certificate automatically.
 
-Use subdomains rather than the bare domain. An apex domain cannot hold a CNAME in
-ordinary DNS and needs provider-specific ALIAS or ANAME support.
+DNS for `natoli.dk` is at Simply.com:
 
-If DNS is hosted on Cloudflare, check Railway's current guidance before enabling
-the proxy, as proxying can interfere with certificate issuance.
+```text
+www   CNAME  <frontend-service>.up.railway.app
+api   CNAME  <backend-service>.up.railway.app
++ the two TXT verification records Railway shows
+```
+
+The bare domain is handled by Simply.com's URL forwarding, set under the
+domain's DNS administration: `natoli.dk` → `https://www.natoli.dk`. It is free
+and the forwarding server issues its own certificate, so `https://natoli.dk`
+redirects instead of failing on a certificate mismatch.
+
+The bare domain cannot point at Railway directly. Railway hands out a CNAME
+target, a CNAME is illegal at a zone apex, and the workarounds (ALIAS/ANAME
+records, CNAME flattening) are provider features Simply.com does not offer.
+Reaching the apex would mean moving the domain's nameservers to a provider that
+does, such as Cloudflare — see [DEPLOY.md](DEPLOY.md) §4, which also covers the
+`.dk` registry's validation rules for that. It buys nothing for this app.
 
 ### CORS
 
@@ -494,14 +528,17 @@ listed exactly — a wildcard is not permitted for credentialed requests.
 If the frontend is blank:
 
 1. Open the frontend deployment logs and confirm a process is listening on `0.0.0.0:$PORT`.
+   If the page instead reads `Blocked request. This host is not allowed`, the
+   hostname is missing from `preview.allowedHosts` in `frontend/vite.config.js`.
 2. Open browser developer tools and check whether JavaScript assets return `200`.
 3. Confirm assets are requested from `/assets/`, not `/training-tracker/assets/`.
-4. Confirm the browser API request targets the backend custom domain (`api.yourdomain.com`), not `127.0.0.1`, `localhost`, or the generated `*.up.railway.app` domain.
+4. Confirm the browser API request targets the backend custom domain (`api.natoli.dk`), not `127.0.0.1`, `localhost`, or the generated `*.up.railway.app` domain.
 
 If the backend fails during startup:
 
 1. Confirm the service root is `/backend`.
-2. Confirm the start command is `uvicorn app.main:app --host 0.0.0.0 --port $PORT`.
+2. Confirm the start command is `uvicorn app.main:app --host 0.0.0.0 --port $PORT`
+   (it comes from `backend/railway.json`).
 3. Confirm `DATABASE_URL` exists in the backend service variables.
 4. Confirm the PostgreSQL service is in the same Railway project.
 5. Check that the deployment installed the current `requirements.txt` containing `psycopg`.

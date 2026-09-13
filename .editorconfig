@@ -1,0 +1,19 @@
+# Tabs, rendered 4 wide. frontend/src already used tabs; this keeps new files
+# and editors from drifting back to the 2-space Vite scaffold style.
+root = true
+
+[*]
+indent_style = tab
+tab_width = 4
+end_of_line = lf
+charset = utf-8
+insert_final_newline = true
+trim_trailing_whitespace = true
+
+# PEP 8 and ruff require spaces, and ruff format rewrites tabs anyway
+[*.py]
+indent_style = space
+indent_size = 4
+
+[*.md]
+trim_trailing_whitespace = false

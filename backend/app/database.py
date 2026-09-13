@@ -15,10 +15,9 @@ if DATABASE_URL and DATABASE_URL.startswith("postgresql://"):
         1,
     )
 
-print("Modified:", DATABASE_URL)
-
-
-engine = create_engine(DATABASE_URL)
+# Railway drops idle Postgres connections; pre_ping discards a dead one and
+# reconnects instead of failing the first request after a quiet period
+engine = create_engine(DATABASE_URL, pool_pre_ping=True)
 
 SessionLocal = sessionmaker(
     bind=engine,
