@@ -100,10 +100,14 @@ Railway uses two services from this repository:
 - Frontend service root: `/frontend`
 - Backend service root: `/backend`
 
+The deploy commands live in `backend/railway.json` and `frontend/railway.json`,
+so only each service's root directory and its variables are set in the dashboard.
+
 The backend needs a Railway PostgreSQL `DATABASE_URL` and the allowed frontend origin in `CORS_ORIGINS`. The frontend needs the public backend URL in `VITE_API_URL`.
 
-Both services must be served from subdomains of one custom domain, for example
-`app.yourdomain.com` and `api.yourdomain.com`. The generated `*.up.railway.app`
-domains do not work for a logged-in session, because they count as separate sites
-and the browser discards the session cookie. Detailed Railway instructions are in
-[docs/setup.md](docs/setup.md).
+The application is served from `https://www.natoli.dk`, the API from
+`https://api.natoli.dk`, and `natoli.dk` redirects to the former. Both services
+must share one registrable domain: the generated `*.up.railway.app` domains do
+not work for a logged-in session, because they count as separate sites and the
+browser discards the session cookie. Detailed Railway instructions are in
+[docs/DEPLOY.md](docs/DEPLOY.md).

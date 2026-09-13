@@ -1,14 +1,17 @@
 import os
 
-from fastapi import FastAPI
+from fastapi import Depends, FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from sqlalchemy import text
+from sqlalchemy.orm import Session as DBSession
 
 from . import composition
+from .database import get_db
 
 app = FastAPI()
 
 # the deployed frontend is a different origin, so it must be allowed explicitly
-# (Railway: CORS_ORIGINS=https://app.<domain>)
+# (Railway: CORS_ORIGINS=https://www.natoli.dk)
 origins = os.getenv("CORS_ORIGINS", "http://localhost:5173").split(",")
 
 app.add_middleware(
@@ -28,5 +31,9 @@ def root():
 
 
 @app.get("/health")
-def health():
+def health(db: DBSession = Depends(get_db)):
+    # Railway's healthcheck hits this, so it has to actually touch the database:
+    # a reply of "healthy" from a service that can't reach Postgres would let a
+    # broken release take traffic. A failed query raises, which is the point.
+    db.execute(text("SELECT 1"))
     return {"database": True}

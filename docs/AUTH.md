@@ -333,8 +333,8 @@ routes is the "wraps every protected route" arrow in the diagram.
   silently breaks: the frontend and the API must be the *same site* (one
   registrable domain), or the browser won't even store the cookie the login
   response sets. Two `*.up.railway.app` services are *not* same-site —
-  Railway is on the Public Suffix List. Hence `app.<domain>` +
-  `api.<domain>`; see [DEPLOY.md](DEPLOY.md) §4. Locally the same rule
+  Railway is on the Public Suffix List. Hence `www.natoli.dk` +
+  `api.natoli.dk`; see [DEPLOY.md](DEPLOY.md) §4. Locally the same rule
   applies: use `localhost` for both, never `localhost` for one and
   `127.0.0.1` for the other.
 - **CORS is a separate gate.** `allow_credentials=True` plus the exact origin
