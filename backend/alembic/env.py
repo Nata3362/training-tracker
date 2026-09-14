@@ -3,7 +3,7 @@ from logging.config import fileConfig
 from sqlalchemy import engine_from_config, pool
 
 from alembic import context
-from app import composition  # noqa: F401  (registers all tables on Base.metadata)
+from app import profile  # noqa: F401  (registers all tables on Base.metadata)
 from app.database import DATABASE_URL, Base
 
 # this is the Alembic Config object, which provides
