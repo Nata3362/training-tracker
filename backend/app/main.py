@@ -5,7 +5,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy import text
 from sqlalchemy.orm import Session as DBSession
 
-from . import composition
+from . import profile
 from .database import get_db
 
 app = FastAPI()
@@ -22,7 +22,7 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-app.include_router(composition.router)
+app.include_router(profile.router)
 
 
 @app.get("/")
