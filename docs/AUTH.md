@@ -10,18 +10,13 @@ Nothing in this module knows what a workout is. It only knows `users` and
 `sessions`. The workout tracker plugs into it at two points — noted where they
 come up below.
 
-**As built**, "the module" is a real package, `backend/app/authentication/`,
-that never imports `Person` *and defines no HTTP endpoints* — the code
-samples below read as one file with routes for clarity, but the plain
-functions map onto `authentication/models.py`, `security.py`, and `auth.py`,
-while every route (including the ones with no `Person` involvement at all,
-like login) lives in `backend/app/composition.py`. That file is `signup()`'s
-"app hook" from §5 made literal, and it's the only place that imports both
-`app.authentication` and `app.models`. The identity endpoint is `GET /user`,
-not `/me` as sampled in an earlier design pass; the real handler also inlines
-the `User`/`Person` join directly rather than through a separate
-`get_identity()` function, since it has exactly one caller — §5's sample
-keeps the split for readability. See [docs/setup.md](setup.md) §2 for the
+**As built**, authentication is a real package, `backend/app/authentication/`,
+that owns users, passwords, sessions, and the `require_auth` dependency. It
+does not create `Person` records. HTTP account workflows live in
+`backend/app/account/`: `routes.py` owns signup, login, and logout, while
+`service.py` coordinates registration across the authentication and person
+packages. The person profile model and its authenticated-profile dependency
+live in `backend/app/person/`. See [docs/setup.md](setup.md) §2 for the
 current file map.
 
 ---
@@ -289,15 +284,12 @@ logged out — without it, a page refresh (which wipes all client state but
 keeps the cookie) would show the login form to someone already logged in. It
 joins `User` and `Person`, since a display name has to come from somewhere.
 
-`/user` isn't defined *inside* the module, though — the module exposes plain
-functions only, no FastAPI routes at all. It lives in the composition file
-(`app/composition.py` in this codebase), which is the "app hook" from §2 and
-§5's `signup()` made literal, not just commented: nothing under
-`app/authentication/` imports `Person`, or decides an HTTP path or status
-code. A different project reusing this module gets
-`create_user`/`authenticate_user`/`require_auth` for free and writes a
-handful of one-line route wrappers around them, plus its own identity join
-for whatever "owning" table it wired up in §2.
+`/user` is exposed by `authentication/routes.py` and uses `require_auth` to
+look up the authenticated user's public identity. Signup is deliberately
+different: `account/routes.py` handles the HTTP request and
+`account/service.py` calls `create_user()` and `create_person()` in one
+account-registration workflow. Authentication remains reusable because it
+does not import the person package or decide how a profile is created.
 
 *(An earlier pass also had a pure, `Person`-free `/auth/me` inside the same
 composition file, for a consumer that needs "is this session valid" without a

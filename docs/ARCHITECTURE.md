@@ -3,11 +3,13 @@
 Target stack: **Python (FastAPI) + PostgreSQL via SQLAlchemy** for the
 backend/data layer, **React + Vite** for the frontend (see §6).
 
-Partly built since this was written: auth ([AUTH.md](AUTH.md)) exists, so the
-database now holds `users`, `sessions`, and a minimal `people` — created by
-Alembic, which owns the schema from here on. The rest of the models below are
-still a design. They arrive as further migrations rather than the from-scratch
-creation this doc originally assumed.
+Partly built since this was written: authentication and account registration
+([AUTH.md](AUTH.md)) exist, so the database now holds `users`, `sessions`, and
+a minimal `people` — created by Alembic, which owns the schema from here on.
+The `account` package coordinates registration by creating the authentication
+user and person profile together. The rest of the models below are still a
+design. They arrive as further migrations rather than the from-scratch creation
+this doc originally assumed.
 
 This document maps the current Apps Script prototype (`Code.gs`, described in
 full in [README.md](README.md) see old folder) onto four layers — **Data → Domain → API →
@@ -156,8 +158,9 @@ class LogSet(Base):
     note: Mapped[str | None]
 ```
 
-`Person.user_id` is the one field [AUTH.md](AUTH.md) adds — it's on the model
-from the start here, not bolted on later.
+`Person.user_id` is the link between authentication and the person domain. The
+account service creates both sides during registration, while authenticated
+person routes resolve the profile through `require_person`.
 
 `log_sets` is append-only, same invariant as the prototype's `Log`: nothing
 ever updates a row, `saveSession` only inserts (or deletes-and-reinserts a
@@ -234,9 +237,10 @@ earns its place with the second screen, not before.
 
 ## 7. First steps, in order
 
-0. ~~Auth~~ — done ahead of this list ([AUTH.md](AUTH.md)): `users`,
-   `sessions`, and a minimal `Person` exist, along with the sign-in frontend.
-   `Person` still needs the rest of its columns below.
+0. ~~Auth and account foundation~~ — done ahead of this list
+  ([AUTH.md](AUTH.md)): `users`, `sessions`, and a minimal `Person` exist,
+  account registration creates the linked records, and the sign-in frontend
+  can restore the current user.
 1. SQLAlchemy models above (`Person`, `Exercise`, `PlanExercise`, `Target`,
    `LogSet`) as an Alembic revision against the existing schema,
    + seed data ported from `Exercises`/`Plans` starters in `Code.gs`.
@@ -254,11 +258,13 @@ earns its place with the second screen, not before.
 
 ## 8. Open questions
 
-- **Auth.** ~~Open.~~ Resolved and built: email/password with server-side
-  sessions ([AUTH.md](AUTH.md)). `Person.user_id` is the wire between a login
-  and a person row. One constraint fell out of deploying it — the frontend and
-  API must sit under one registrable domain, or the browser discards the
-  session cookie ([DEPLOY.md](DEPLOY.md) §4).
+- **Auth and account.** ~~Open.~~ Resolved and built: email/password with
+  server-side sessions ([AUTH.md](AUTH.md)). Authentication owns users and
+  sessions, person owns profiles, and account registration connects them.
+  `Person.user_id` is the wire between a login and a person row. One
+  constraint fell out of deploying it — the frontend and API must sit under
+  one registrable domain, or the browser discards the session cookie
+  ([DEPLOY.md](DEPLOY.md) §4).
 - **Session as an entity.** Prototype derives `session_id` from
   `date + person initials` and treats it as a string, not a table. Proposed
   schema keeps that. If you want to rename/delete/annotate a whole session
