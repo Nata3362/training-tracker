@@ -1,6 +1,6 @@
 from app.authentication.auth import verify_session
 from app.authentication.models import User
-from app.models import Person
+from app.person.models import Person
 
 SIGNUP_BODY = {
     "email": "a@example.com",
