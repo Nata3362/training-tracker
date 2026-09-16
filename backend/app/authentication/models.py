@@ -16,7 +16,6 @@ class User(Base):
 
     email: Mapped[str] = mapped_column(unique=True)
     password_hash: Mapped[str]
-    name: Mapped[str]
     created_at: Mapped[datetime] = mapped_column(
         default=lambda: datetime.now(timezone.utc)
     )

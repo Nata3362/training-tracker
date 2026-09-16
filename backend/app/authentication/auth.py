@@ -21,11 +21,11 @@ from .security import hash_password, verify_password
 SESSION_TTL = timedelta(days=30)
 
 
-def create_user(db: DBSession, email: str, password: str, name: str) -> User:
+def create_user(db: DBSession, email: str, password: str) -> User:
     """Create and flush a user after checking that the email is unused."""
     if db.scalar(select(User).where(User.email == email)):
         raise HTTPException(409, "Email already registered")
-    user = User(email=email, password_hash=hash_password(password), name=name)
+    user = User(email=email, password_hash=hash_password(password))
     db.add(user)
     db.flush()  # assigns user.id without committing yet
     return user
@@ -59,10 +59,7 @@ def create_session(db: DBSession, user_id: uuid.UUID) -> str:
     return token
 
 
-def verify_session(
-        db: DBSession,
-        token: str
-        ) -> uuid.UUID | None:
+def verify_session(db: DBSession, token: str) -> uuid.UUID | None:
     """Resolve a valid session token to its user ID, if it is still active."""
     token_hash = hashlib.sha256(token.encode()).hexdigest()
     row = db.scalar(
