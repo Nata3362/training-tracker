@@ -98,15 +98,23 @@ training-tracker/
 
 ### Backend files
 
-- `backend/app/main.py` creates the FastAPI application, configures CORS from `CORS_ORIGINS`, and registers `composition.router`.
+- `backend/app/main.py` creates the FastAPI application, configures CORS from `CORS_ORIGINS`, and registers the account, authentication, and person routers.
 - `backend/app/database.py` loads environment variables, reads `DATABASE_URL`, selects the Psycopg 3 SQLAlchemy driver when needed, creates the database engine, and provides database sessions to API handlers.
-- `backend/app/models.py` contains the domain models — currently just `Person`. Nothing auth-specific lives here.
-- `backend/app/composition.py` is the only file that imports both `app.authentication` and `app.models`, **and it is where every endpoint lives** — `app/authentication/` defines no routes at all, only plain functions. Every route handler (`/auth/signup`, `/auth/login`, `/auth/logout`, `/user`) calls into `app.authentication.auth`'s functions; `signup_endpoint` and `user_endpoint` additionally touch `Person` directly (creating it, or joining it in), since each has exactly one caller and isn't worth a separate function.
-- `backend/app/authentication/` is a self-contained module that knows only about `users` and `sessions`, not about people or workouts, and defines no HTTP endpoints:
+- `backend/app/authentication/` owns identity and session mechanics. It knows only about `users` and `sessions`:
   - `models.py` — the `User` and `AuthSession` SQLAlchemy models.
   - `security.py` — hashes and verifies passwords using `hashlib.scrypt` from the standard library.
   - `auth.py` — plain functions: `create_user`, `authenticate_user`, `create_session`/`verify_session`/`revoke_session`, and the `require_auth` dependency that protected endpoints depend on.
-  - `schemas.py` — the Pydantic request bodies (`SignupBody`, `LoginBody`).
+-  - `routes.py` — authentication-state endpoints such as `GET /user`.
+- `backend/app/account/` owns account workflows and connects authentication to the person domain:
+   - `routes.py` — `POST /auth/signup`, `POST /auth/login`, and `POST /auth/logout`.
+   - `service.py` — `register_account`, which creates the user and person records and starts a session.
+- `backend/app/person/` owns person profiles:
+   - `models.py` — the `Person` SQLAlchemy model.
+   - `service.py` — `create_person`, which creates a profile without committing the surrounding transaction.
+   - `dependencies.py` — `require_person`, which resolves the authenticated user's profile.
+   - `routes.py` — person profile endpoints such as `GET /person/me`.
+   - `schemas.py` — person-related Pydantic schemas.
+- `backend/app/schemas.py` contains shared request and response schemas used by multiple domains.
 - `backend/alembic/` contains the migrations that create and change the database schema.
 - `backend/tests/` contains the test suite, and `run_tests.sh` runs it.
 - `backend/requirements.txt` lists the Python dependencies used by the backend.
@@ -234,17 +242,13 @@ def example(user_id: int = Depends(require_auth)):
 `SameSite=Lax` is also the reason both services must sit under one custom domain.
 See section 6.
 
-`GET /user` lives in `app/composition.py`, not `app/authentication/` — that
-module defines no endpoints at all, just the plain functions `user_endpoint`
-calls into (`require_auth`). It joins `User` and `Person` directly for the
-`name` the frontend displays — a one-off join, not worth its own named
-function for a single caller. An earlier pass also had a pure
-`app.authentication`-only `/auth/me` (`{id, email}`, no `Person`) alongside
-this one; it was removed as redundant for an app with a single frontend
-consumer — nothing needed "logged in, but no name" as a separate case. If
-that need shows up later (a consumer that must stay ignorant of the domain
-schema), a small `get_auth_identity()` wrapping `db.get(User, user_id)` is
-the way back in.
+`GET /user` lives in `app/authentication/routes.py` and uses `require_auth` to
+resolve the authenticated user. Account registration lives in
+`app/account/service.py`, which is the connection point that calls both
+authentication's `create_user()` and person's `create_person()`. Person routes
+use `require_person` when they need the profile rather than repeating the
+user-to-person lookup. This keeps authentication independent of the person
+domain while allowing the account workflow to create both records together.
 
 ## 4. Frontend Design
 
