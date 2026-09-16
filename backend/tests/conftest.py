@@ -6,6 +6,44 @@ from sqlalchemy.pool import StaticPool
 
 from app.database import Base, get_db
 from app.main import app
+from app.authentication.models import AuthSession, User
+from app.person.models import Person
+
+
+SIGNUP_BODY = {
+    "email": "a@example.com",
+    "password": "correct horse battery staple",
+    "name": "A",
+}
+
+@pytest.fixture()
+def create_user(client, db_session):
+    """Create a user, person profile, and authenticated session for a test."""
+    response = client.post("/auth/signup", json=SIGNUP_BODY)
+
+    assert response.status_code == 200
+
+    user = db_session.query(User).filter_by(
+        email=SIGNUP_BODY["email"]
+    ).one()
+
+    person = db_session.query(Person).filter_by(
+        user_id=user.id
+    ).one()
+
+    session_token = client.cookies.get("session")
+
+    auth_session = db_session.query(AuthSession).filter_by(
+        user_id=user.id
+    ).one()
+
+    return {
+        "client": client,
+        "user": user,
+        "person": person,
+        "session": session_token,
+        "auth_session": auth_session,
+    }
 
 
 @pytest.fixture()
