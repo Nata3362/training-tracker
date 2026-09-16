@@ -1,5 +1,13 @@
+"""Authentication services and FastAPI dependencies.
+
+This module deals only with users, passwords, and sessions. Account
+registration may call these services, but authentication does not create
+person records or define account workflows.
+"""
+
 import hashlib
 import secrets
+import uuid
 from datetime import datetime, timedelta, timezone
 
 from fastapi import Cookie, Depends, HTTPException
@@ -13,23 +21,26 @@ from .security import hash_password, verify_password
 SESSION_TTL = timedelta(days=30)
 
 
-def create_user(db: DBSession, email: str, password: str) -> User:
+def create_user(db: DBSession, email: str, password: str, name: str) -> User:
+    """Create and flush a user after checking that the email is unused."""
     if db.scalar(select(User).where(User.email == email)):
         raise HTTPException(409, "Email already registered")
-    user = User(email=email, password_hash=hash_password(password))
+    user = User(email=email, password_hash=hash_password(password), name=name)
     db.add(user)
     db.flush()  # assigns user.id without committing yet
     return user
 
 
 def authenticate_user(db: DBSession, email: str, password: str) -> User:
+    """Return the matching user or raise an authentication error."""
     user = db.scalar(select(User).where(User.email == email))
     if user is None or not verify_password(password, user.password_hash):
         raise HTTPException(401, "Invalid email or password")
     return user
 
 
-def create_session(db: DBSession, user_id: int) -> str:
+def create_session(db: DBSession, user_id: uuid.UUID) -> str:
+    """Create a server-side session and return its raw cookie token."""
     # piggyback expired-row cleanup on login,
     # revisit if sessions table grows large
     db.execute(
@@ -44,11 +55,15 @@ def create_session(db: DBSession, user_id: int) -> str:
             expires_at=datetime.now(timezone.utc) + SESSION_TTL,
         )
     )
-    db.commit()
+    db.flush()
     return token
 
 
-def verify_session(db: DBSession, token: str) -> int | None:
+def verify_session(
+        db: DBSession,
+        token: str
+        ) -> uuid.UUID | None:
+    """Resolve a valid session token to its user ID, if it is still active."""
     token_hash = hashlib.sha256(token.encode()).hexdigest()
     row = db.scalar(
         select(AuthSession).where(
@@ -60,20 +75,24 @@ def verify_session(db: DBSession, token: str) -> int | None:
 
 
 def revoke_session(db: DBSession, token: str) -> None:
+    """Delete the server-side session represented by a cookie token."""
     token_hash = hashlib.sha256(token.encode()).hexdigest()
     db.execute(delete(AuthSession).where(AuthSession.token_hash == token_hash))
     db.commit()
 
 
-async def require_auth(
-    # dependency for routes that need a logged-in user, e.g.
-    # user_id: int = Depends(require_auth)
+def get_user(
     session: str | None = Cookie(default=None),
     db: DBSession = Depends(get_db),
-) -> int:
+) -> uuid.UUID|None:
+    """Resolve the optional session cookie to a user ID."""
     if session is None:
-        raise HTTPException(401, "Not logged in")
-    user_id = verify_session(db, session)
+        return None
+    return verify_session(db, session)
+
+
+def require_auth(user_id: uuid.UUID | None = Depends(get_user)) -> uuid.UUID:
+    """Require an authenticated user and return their user ID."""
     if user_id is None:
-        raise HTTPException(401, "Session expired or invalid")
+        raise HTTPException(401, "Not logged in")
     return user_id
