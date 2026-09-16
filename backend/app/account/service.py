@@ -9,7 +9,7 @@ def register_account(
         password: str,
         name: str, 
 ) -> str:
-    user = create_user(db ,email, password, name)
+    user = create_user(db ,email, password)
     person = create_person(db, user.id, name)
     token = create_session(db, user.id)
     db.commit()
