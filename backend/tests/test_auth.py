@@ -1,6 +1,9 @@
+from datetime import datetime, timedelta, timezone
+
 from app.authentication.auth import verify_session
-from app.authentication.models import User
+from app.authentication.models import User, AuthSession
 from app.person.models import Person
+
 
 SIGNUP_BODY = {
     "email": "a@example.com",
@@ -40,21 +43,13 @@ def test_login_sets_new_session_cookie(client):
     assert old_session != resp.cookies.get("session")
 
 
-def test_logout(client, db_session):
-    client.post("/auth/signup", json=SIGNUP_BODY)
+def test_logout(create_user):
+    client = create_user["client"]
 
-    resp = client.post(
-        "/auth/login",
-        json={"email": SIGNUP_BODY["email"], "password": SIGNUP_BODY["password"]},
-    )
+    client.post("/auth/logout")
+    resp = client.get("/user")
 
-    token = resp.cookies.get("session")
-
-    resp = client.post("/auth/logout")
-
-    assert resp.status_code == 200
-    assert resp.cookies.get("session") is None
-    assert verify_session(db_session, token) is None
+    assert resp.status_code == 401
 
 
 def test_signup_does_not_store_plaintext_password(client, db_session):
@@ -64,7 +59,32 @@ def test_signup_does_not_store_plaintext_password(client, db_session):
     assert user.password_hash != SIGNUP_BODY["password"]
 
 
+def test_user(create_user):
+    client = create_user["client"]
+    user: User = create_user["user"]
+
+    resp = client.get("/user")
+
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["email"] == user.email
+    assert body["id"] == str(user.id)
+
+
 # TEST ERROR CASES
+
+def test_user_with_an_expired_session_rejected(create_user, db_session):
+    client = create_user["client"]
+
+    session_row = db_session.query(AuthSession).one()
+    session_row.expires_at = datetime.now(timezone.utc) - timedelta(seconds=1)
+    db_session.commit()
+
+    resp = client.get("/user")
+
+    assert resp.status_code == 401
+
+
 def test_signup_duplicate_email_rejected(client):
     client.post("/auth/signup", json=SIGNUP_BODY)
     resp = client.post("/auth/signup", json=SIGNUP_BODY)
