@@ -1,18 +1,18 @@
 import uuid
 
-from fastapi import APIRouter, HTTPException, Cookie, Depends, Response, status
+from fastapi import APIRouter, HTTPException, Depends
 from sqlalchemy import select
 from sqlalchemy.orm import Session as DBSession
 
-from ..authentication.auth import (
-    require_auth,
-    get_user,
-)
-from ..authentication.models import User
 from .schemas import Exercise, ExerciseResponse, ExerciseUpdate
-from ..database import get_db
-from app.exercise.models import ExerciseModel
+from .models import ExerciseModel
+from .service import get_exercise_by_id, get_all_exercises, is_default_exercise
+from .error_codes import ExerciseErrorCode
+
 from ..person.models import Person
+from ..person.service import get_person
+from ..database import get_db
+
 
 router = APIRouter(prefix="/exercise",tags=["exercise"])
 
@@ -20,17 +20,13 @@ router = APIRouter(prefix="/exercise",tags=["exercise"])
 @router.post("/new", response_model=ExerciseResponse, status_code=201)
 def exercise_post(
     payload: Exercise, 
-    user_id: uuid.UUID = Depends(require_auth),
+    person: Person = Depends(get_person()),
     db: DBSession = Depends(get_db)
-):
+) -> ExerciseResponse:
     """Create a new exercise"""
-    person = db.scalar(
-        select(Person).where(Person.user_id == user_id)
-    )
-    
     exercise = ExerciseModel(
         **payload.model_dump(),
-        person_id = person.id,
+        person_id=person.id,
     )
 
     db.add(exercise)
@@ -40,24 +36,19 @@ def exercise_post(
     return exercise
 
 
-@router.patch("/update/{exercise_id}", response_model=ExerciseResponse)
+@router.patch("/id/{exercise_id}", response_model=ExerciseResponse)
 def exercise_update(
     exercise_id: uuid.UUID,
     payload: ExerciseUpdate,
-    user_id: uuid.UUID = Depends(require_auth),
+    person: Person = Depends(get_person()),
     db: DBSession = Depends(get_db)
-):
-    """Update existing exersice"""
-    person = db.scalar(select(Person).where(Person.user_id == user_id)) 
-
-    exercise = db.scalar(
-        select(ExerciseModel).where(
-            ExerciseModel.id == exercise_id, 
-            ExerciseModel.person_id == person.id
-        )
-    )
+) -> ExerciseResponse:
+    """Update existing exercise"""
+    exercise = get_exercise_by_id(db, exercise_id, person.id)
     if exercise is None:
-        raise HTTPException(status_code=404, detail="Execise not found")
+        raise HTTPException(status_code=404, detail=ExerciseErrorCode.EXERCISE_NOT_FOUND.value)
+    if is_default_exercise(exercise):
+        raise HTTPException(status_code=403, detail=ExerciseErrorCode.DEFAULT_EXERCISE_EDIT.value)
     update_data = payload.model_dump(exclude_unset=True)
 
     for field, value in update_data.items():
@@ -66,34 +57,46 @@ def exercise_update(
     db.commit()
     db.refresh(exercise)
 
-    return exercise   
+    return exercise
 
 
-
-@router.put("/exercise/{id}")
-def exercise_put(
-    payload: Exercise, 
-    response: ExerciseResponse,
-    user_id = Depends(require_auth),
-    DBSession = Depends(get_db)
-):
-    pass
-
-
-@router.get("/exercise/{id}")
-def exercise_get(
-    payload: Exercise, 
-    response: ExerciseResponse,
-    user_id = Depends(get_user),
-    DBSession = Depends(get_db)
-):
-    pass
-
-
-@router.delete("/exercise/{id}")
+@router.delete("/id/{exercise_id}", status_code=204)
 def exercise_delete(
-    response: ExerciseResponse,
-    user_id = Depends(require_auth),
-    DBSession = Depends(get_db)
+    exercise_id: uuid.UUID,
+    person: Person = Depends(get_person()),
+    db: DBSession = Depends(get_db)
 ):
-    pass
+    """Delete an exercise"""
+    exercise = get_exercise_by_id(db, exercise_id, person.id)
+    if exercise is None:
+        raise HTTPException(status_code=404, detail=ExerciseErrorCode.EXERCISE_NOT_FOUND.value)
+    if is_default_exercise(exercise):
+        raise HTTPException(status_code=403, detail=ExerciseErrorCode.DEFAULT_EXERCISE_DELETE.value)
+
+    db.delete(exercise)
+    db.commit()
+
+
+@router.get("/all", response_model=list[ExerciseResponse])
+def exercise_get_all(
+    person: Person | None = Depends(get_person(required=False)),
+    db: DBSession = Depends(get_db)
+) -> list[ExerciseResponse]:
+    """Get all exercises for the current user"""
+    person_id = person.id if person else None
+
+    return get_all_exercises(db, person_id)
+
+
+@router.get("/id/{exercise_id}")
+def exercise_get(
+    exercise_id: uuid.UUID,
+    person: Person = Depends(get_person()),
+    db: DBSession = Depends(get_db)
+) -> ExerciseResponse:
+    """Get an exercise by ID"""
+    exercise = get_exercise_by_id(db, exercise_id, person.id)
+    if exercise is None:
+        raise HTTPException(status_code=404, detail=ExerciseErrorCode.EXERCISE_NOT_FOUND.value)
+
+    return exercise
