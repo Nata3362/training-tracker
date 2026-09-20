@@ -17,6 +17,7 @@ router = APIRouter(tags=["auth"])
 def user_endpoint(user_id: uuid.UUID = Depends(require_auth), db: DBSession = Depends(get_db)):
     """Return the authenticated user's public account identity."""
     user = db.get(User, user_id)
+
     return {"id": user.id, "email": user.email}
 
 

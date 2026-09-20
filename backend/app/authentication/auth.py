@@ -28,6 +28,7 @@ def create_user(db: DBSession, email: str, password: str) -> User:
     user = User(email=email, password_hash=hash_password(password))
     db.add(user)
     db.flush()  # assigns user.id without committing yet
+
     return user
 
 
@@ -36,6 +37,7 @@ def authenticate_user(db: DBSession, email: str, password: str) -> User:
     user = db.scalar(select(User).where(User.email == email))
     if user is None or not verify_password(password, user.password_hash):
         raise HTTPException(401, "Invalid email or password")
+
     return user
 
 
@@ -56,6 +58,7 @@ def create_session(db: DBSession, user_id: uuid.UUID) -> str:
         )
     )
     db.flush()
+
     return token
 
 
@@ -68,6 +71,7 @@ def verify_session(db: DBSession, token: str) -> uuid.UUID | None:
             AuthSession.expires_at > datetime.now(timezone.utc),
         )
     )
+
     return row.user_id if row else None
 
 
@@ -85,6 +89,7 @@ def get_user(
     """Resolve the optional session cookie to a user ID."""
     if session is None:
         return None
+
     return verify_session(db, session)
 
 
@@ -92,4 +97,5 @@ def require_auth(user_id: uuid.UUID | None = Depends(get_user)) -> uuid.UUID:
     """Require an authenticated user and return their user ID."""
     if user_id is None:
         raise HTTPException(401, "Not logged in")
+
     return user_id

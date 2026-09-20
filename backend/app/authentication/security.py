@@ -9,6 +9,7 @@ def hash_password(password: str) -> str:
     """Hash a password with a random salt using ``hashlib.scrypt``."""
     salt = secrets.token_bytes(16)
     digest = hashlib.scrypt(password.encode(), salt=salt, n=2**14, r=8, p=1)
+
     return salt.hex() + "$" + digest.hex()
 
 
@@ -18,6 +19,7 @@ def verify_password(password: str, stored: str) -> bool:
     digest = hashlib.scrypt(
         password.encode(), salt=bytes.fromhex(salt_hex), n=2**14, r=8, p=1
     )
+
     return hmac.compare_digest(digest, bytes.fromhex(digest_hex))
 
 
