@@ -5,6 +5,10 @@ from sqlalchemy import engine_from_config, pool
 from alembic import context
 from app.person import routes  # noqa: F401  (registers all tables on Base.metadata)
 from app.database import DATABASE_URL, Base
+from app.authentication import models as authentication_models
+from app.person import models as person_models
+from app.exercise import models as exercise_models
+
 
 # this is the Alembic Config object, which provides
 # access to the values within the .ini file in use.
