@@ -9,3 +9,9 @@ def test_me(create_user):
 
     assert response.status_code == 200
     assert response.json()["id"] == str(person.id)
+
+
+def test_not_me(client):
+    response = client.get("/person/me")
+
+    assert response.status_code == 401

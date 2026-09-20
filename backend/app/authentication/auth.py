@@ -77,7 +77,7 @@ def revoke_session(db: DBSession, token: str) -> None:
     db.execute(delete(AuthSession).where(AuthSession.token_hash == token_hash))
     db.commit()
 
-
+# TODO: Merge get_user and require_auth into a single dependency that returns the user object
 def get_user(
     session: str | None = Cookie(default=None),
     db: DBSession = Depends(get_db),
