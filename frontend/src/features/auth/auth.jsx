@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 
-import { api } from "./api";
+import { api } from "../../api";
 import { AuthContext } from "./authContext";
 
 export function AuthProvider({ children }) {
@@ -17,7 +17,7 @@ export function AuthProvider({ children }) {
 	}, []);
 
 	async function signup(email, password, name) {
-		await api("/auth/signup", {
+		await api("/account/signup", {
 			method: "POST",
 			body: JSON.stringify({ email, password, name }),
 		});
@@ -25,7 +25,7 @@ export function AuthProvider({ children }) {
 	}
 
 	async function login(email, password) {
-		await api("/auth/login", {
+		await api("/account/login", {
 			method: "POST",
 			body: JSON.stringify({ email, password }),
 		});
@@ -33,7 +33,7 @@ export function AuthProvider({ children }) {
 	}
 
 	async function logout() {
-		await api("/auth/logout", { method: "POST" });
+		await api("/account/logout", { method: "POST" });
 		setUser(null);
 	}
 
