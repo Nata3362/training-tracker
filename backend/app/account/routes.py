@@ -14,7 +14,7 @@ from ..authentication.auth import (
 )
 from ..person.schemas import LoginBody, SignupBody
 from ..database import get_db
-from .service import register_account
+from .service import register_account, login_user
 
 router = APIRouter(prefix="/account",tags=["account"])
 
@@ -48,18 +48,8 @@ def signup_endpoint(
 def login_endpoint(
     payload: LoginBody, response: Response, db: DBSession = Depends(get_db)
 ):
-    """Authenticate a user and set a new session cookie."""
-    user = authenticate_user(
-        db, 
-        payload.email, 
-        payload.password
-    )
-    
-    token = create_session(
-        db, 
-        user.id
-    )
-    
+    token = login_user(db, payload.email, payload.password)
+
     response.set_cookie(
         "session", 
         token, 
@@ -79,10 +69,7 @@ def logout_endpoint(
 ):
     """Revoke the current session and clear the session cookie."""
     if session:
-        revoke_session(
-            db, 
-            session,
-        )
+        revoke_session(db, session)
 
     response.delete_cookie("session")
     

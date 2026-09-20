@@ -42,6 +42,9 @@ def test_login_sets_new_session_cookie(client):
     assert "session" in resp.cookies
     assert old_session != resp.cookies.get("session")
 
+    response = client.get("/user")
+    assert response.status_code == 200
+
 
 def test_logout(create_user):
     client = create_user["client"]
