@@ -16,10 +16,10 @@ from ..person.schemas import LoginBody, SignupBody
 from ..database import get_db
 from .service import register_account
 
-router = APIRouter(tags=["account"])
+router = APIRouter(prefix="/account",tags=["account"])
 
 
-@router.post("/auth/signup")
+@router.post("/signup")
 def signup_endpoint(
     payload: SignupBody, 
     response: Response, 
@@ -44,7 +44,7 @@ def signup_endpoint(
     return {"ok": True}
 
 
-@router.post("/auth/login")
+@router.post("/login")
 def login_endpoint(
     payload: LoginBody, response: Response, db: DBSession = Depends(get_db)
 ):
@@ -71,7 +71,7 @@ def login_endpoint(
     return {"ok": True}
 
 
-@router.post("/auth/logout")
+@router.post("/logout")
 def logout_endpoint(
     response: Response,
     session: str | None = Cookie(default=None),

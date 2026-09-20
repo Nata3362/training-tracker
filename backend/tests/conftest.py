@@ -19,7 +19,7 @@ SIGNUP_BODY = {
 @pytest.fixture()
 def create_user(client, db_session):
     """Create a user, person profile, and authenticated session for a test."""
-    response = client.post("/auth/signup", json=SIGNUP_BODY)
+    response = client.post("/account/signup", json=SIGNUP_BODY)
 
     assert response.status_code == 200
 
