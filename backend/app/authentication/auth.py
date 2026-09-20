@@ -81,21 +81,24 @@ def revoke_session(db: DBSession, token: str) -> None:
     db.execute(delete(AuthSession).where(AuthSession.token_hash == token_hash))
     db.commit()
 
-# TODO: Merge get_user and require_auth into a single dependency that returns the user object
-def get_user(
-    session: str | None = Cookie(default=None),
-    db: DBSession = Depends(get_db),
-) -> uuid.UUID|None:
-    """Resolve the optional session cookie to a user ID."""
-    if session is None:
-        return None
 
-    return verify_session(db, session)
+def get_user(required: bool = True):
+    """Build a dependency resolving the session cookie to the authenticated user.
 
+    Args:
+        required: when True (default), raise 401 instead of returning None.
 
-def require_auth(user_id: uuid.UUID | None = Depends(get_user)) -> uuid.UUID:
-    """Require an authenticated user and return their user ID."""
-    if user_id is None:
-        raise HTTPException(401, "Not logged in")
+    """
+    def dependency(
+        session: str | None = Cookie(default=None),
+        db: DBSession = Depends(get_db),
+    ) -> User | None:
+        user_id = verify_session(db, session) if session is not None else None
+        user = db.get(User, user_id) if user_id is not None else None
 
-    return user_id
+        if required and user is None:
+            raise HTTPException(401, "Not authenticated")
+
+        return user
+
+    return dependency

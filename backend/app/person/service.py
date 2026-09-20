@@ -6,6 +6,7 @@ from sqlalchemy.orm import Session
 from fastapi import Depends, HTTPException
 
 from ..authentication.auth import get_user
+from ..authentication.models import User
 from ..database import get_db
 from .models import Person
 
@@ -27,13 +28,11 @@ def get_person(required: bool = True):
 
     """
     def dependency(
-        user_id: UUID | None = Depends(get_user),
+        user: User | None = Depends(get_user(required=required)),
         db: Session = Depends(get_db),
     ) -> Person | None:
-        if required and user_id is None:
-            raise HTTPException(status_code=401, detail="Not authenticated")
 
-        person = db.scalar(select(Person).where(Person.user_id == user_id))
+        person = db.scalar(select(Person).where(Person.user_id == user.id)) if user else None
 
         if required and person is None:
             raise HTTPException(status_code=404, detail="Profile not found")
