@@ -1,6 +1,6 @@
 import uuid
 
-from pydantic import BaseModel, EmailStr, ConfigDict
+from pydantic import BaseModel, ConfigDict
 
 from .models import EquipmentEnum, MuscleGroupEnum
 

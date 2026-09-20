@@ -1,8 +1,10 @@
-from sqlalchemy import ForeignKey
-from sqlalchemy.orm import Mapped, mapped_column
 from enum import Enum
 import uuid
+
+from sqlalchemy import ForeignKey
+from sqlalchemy.orm import Mapped, mapped_column
 from sqlalchemy import Enum as SQLEnum
+
 from ..database import Base
 
 

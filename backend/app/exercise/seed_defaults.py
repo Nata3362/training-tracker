@@ -3,13 +3,7 @@ from sqlalchemy import select
 from app.database import SessionLocal
 from app.exercise.default_exercises import DEFAULT_EXERCISES
 from app.exercise.models import ExerciseModel
-from sqlalchemy import select
 
-from app.database import SessionLocal
-from app.exercise.default_exercises import DEFAULT_EXERCISES
-from app.exercise.models import ExerciseModel
-from app.person.models import Person
-from app.authentication.models import User, AuthSession
 
 def seed_default_exercises():
     with SessionLocal() as db:
