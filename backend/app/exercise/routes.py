@@ -10,7 +10,7 @@ from .service import get_exercise_by_id, get_all_exercises, is_default_exercise
 from .error_codes import ExerciseErrorCode
 
 from ..person.models import Person
-from ..person.service import get_person
+from ..person.service import get_person, get_person_optional
 from ..database import get_db
 
 
@@ -20,7 +20,7 @@ router = APIRouter(prefix="/exercise",tags=["exercise"])
 @router.post("/new", response_model=ExerciseResponse, status_code=201)
 def exercise_post(
     payload: Exercise, 
-    person: Person = Depends(get_person()),
+    person: Person = Depends(get_person),
     db: DBSession = Depends(get_db)
 ) -> ExerciseResponse:
     """Create a new exercise"""
@@ -40,7 +40,7 @@ def exercise_post(
 def exercise_update(
     exercise_id: uuid.UUID,
     payload: ExerciseUpdate,
-    person: Person = Depends(get_person()),
+    person: Person = Depends(get_person),
     db: DBSession = Depends(get_db)
 ) -> ExerciseResponse:
     """Update existing exercise"""
@@ -63,7 +63,7 @@ def exercise_update(
 @router.delete("/id/{exercise_id}", status_code=204)
 def exercise_delete(
     exercise_id: uuid.UUID,
-    person: Person = Depends(get_person()),
+    person: Person = Depends(get_person),
     db: DBSession = Depends(get_db)
 ):
     """Delete an exercise"""
@@ -79,7 +79,7 @@ def exercise_delete(
 
 @router.get("/all", response_model=list[ExerciseResponse])
 def exercise_get_all(
-    person: Person | None = Depends(get_person(required=False)),
+    person: Person | None = Depends(get_person_optional),
     db: DBSession = Depends(get_db)
 ) -> list[ExerciseResponse]:
     """Get all exercises for the current user"""
@@ -91,7 +91,7 @@ def exercise_get_all(
 @router.get("/id/{exercise_id}")
 def exercise_get(
     exercise_id: uuid.UUID,
-    person: Person = Depends(get_person()),
+    person: Person = Depends(get_person),
     db: DBSession = Depends(get_db)
 ) -> ExerciseResponse:
     """Get an exercise by ID"""

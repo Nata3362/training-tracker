@@ -9,7 +9,7 @@ router = APIRouter(tags=["auth"])
 
 
 @router.get("/user")
-def user_endpoint(user: User = Depends(get_user())):
+def user_endpoint(user: User = Depends(get_user)):
     """Return the authenticated user's public account identity."""
     return {"id": user.id, "email": user.email}
 

@@ -5,7 +5,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 from fastapi import Depends, HTTPException
 
-from ..authentication.auth import get_user
+from ..authentication.auth import get_user, get_user_optional
 from ..authentication.models import User
 from ..database import get_db
 from .models import Person
@@ -20,23 +20,23 @@ def create_person(db: Session, user_id: UUID, name: str) -> Person:
     return person
 
 
-def get_person(required: bool = True):
-    """Build a dependency resolving the authenticated user's person profile.
+def _resolve_person(db: Session, user: User | None) -> Person | None:
+    """Resolve a user to their person profile, if one exists."""
+    return db.scalar(select(Person).where(Person.user_id == user.id)) if user else None
 
-    Args:
-        required: when True (default), raise 401/404 instead of returning None.
 
-    """
-    def dependency(
-        user: User | None = Depends(get_user(required=required)),
-        db: Session = Depends(get_db),
-    ) -> Person | None:
+def get_person(user: User = Depends(get_user), db: Session = Depends(get_db)) -> Person:
+    """Resolve the authenticated user's person profile, or raise 401/404."""
+    person = _resolve_person(db, user)
+    if person is None:
+        raise HTTPException(status_code=404, detail="Profile not found")
 
-        person = db.scalar(select(Person).where(Person.user_id == user.id)) if user else None
+    return person
 
-        if required and person is None:
-            raise HTTPException(status_code=404, detail="Profile not found")
 
-        return person
-
-    return dependency
+def get_person_optional(
+    user: User | None = Depends(get_user_optional),
+    db: Session = Depends(get_db),
+) -> Person | None:
+    """Resolve the authenticated user's person profile, or None."""
+    return _resolve_person(db, user)

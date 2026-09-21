@@ -82,23 +82,22 @@ def revoke_session(db: DBSession, token: str) -> None:
     db.commit()
 
 
-def get_user(required: bool = True):
-    """Build a dependency resolving the session cookie to the authenticated user.
+def _resolve_user(session: str | None, db: DBSession) -> User | None:
+    """Resolve a session cookie to its user, if the session is valid."""
+    user_id = verify_session(db, session) if session is not None else None
 
-    Args:
-        required: when True (default), raise 401 instead of returning None.
+    return db.get(User, user_id) if user_id is not None else None
 
-    """
-    def dependency(
-        session: str | None = Cookie(default=None),
-        db: DBSession = Depends(get_db),
-    ) -> User | None:
-        user_id = verify_session(db, session) if session is not None else None
-        user = db.get(User, user_id) if user_id is not None else None
 
-        if required and user is None:
-            raise HTTPException(401, "Not authenticated")
+def get_user(session: str | None = Cookie(default=None), db: DBSession = Depends(get_db)) -> User:
+    """Resolve the session cookie to the authenticated user, or raise 401."""
+    user = _resolve_user(session, db)
+    if user is None:
+        raise HTTPException(401, "Not authenticated")
 
-        return user
+    return user
 
-    return dependency
+
+def get_user_optional(session: str | None = Cookie(default=None), db: DBSession = Depends(get_db)) -> User | None:
+    """Resolve the session cookie to the authenticated user, or None."""
+    return _resolve_user(session, db)
