@@ -11,5 +11,5 @@ class Person(Base):
     """Profile data owned by one authenticated user."""
 
     __tablename__ = "people"
-    user_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("users.id"), unique=True)
+    user_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), unique=True)
     name: Mapped[str] = mapped_column()
