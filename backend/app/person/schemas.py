@@ -1,6 +1,8 @@
 """Pydantic schemas for person profile requests and responses."""
 
-from pydantic import BaseModel, EmailStr
+import uuid
+
+from pydantic import BaseModel, ConfigDict, EmailStr
 
 
 class SignupBody(BaseModel):
@@ -12,4 +14,12 @@ class SignupBody(BaseModel):
 class LoginBody(BaseModel):
     email: EmailStr
     password: str
+
+
+class PersonResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: uuid.UUID
+    user_id: uuid.UUID
+    name: str
 
