@@ -2,45 +2,56 @@
 
 Training Tracker is a web application for recording training activity and following progression across multiple disciplines.
 
-The repository currently contains the initial application foundation:
+The repository currently contains:
 
 - A FastAPI backend connected to PostgreSQL through SQLAlchemy.
-- A React frontend built with Vite.
+- A React frontend built with Vite and React Router.
 - Local PostgreSQL development through Docker Compose.
 - Separate Railway services for the frontend and backend.
 - Email and password authentication using server-side sessions in an httpOnly cookie.
 - A sign-in and sign-up screen on the frontend.
+- A per-user exercise library: create, edit, delete, and list exercises, seeded
+  with a set of default exercises. It has a backend API and a frontend page.
 - Alembic database migrations and a backend test suite.
 
-Workout routines, performed workout logging, progression analytics, and dashboards are planned but are not implemented yet.
+Creating workouts and logging performed workouts are in progress: the frontend
+pages exist as placeholders. Progression analytics and dashboards are planned.
+See [docs/Design/Requirements.md](docs/Design/Requirements.md) for the intended
+workout model.
 
 ## Project Structure
 
 ```text
 backend/
 	app/
+		main.py         FastAPI application, CORS, router registration, /health
 		database.py     Database engine, sessions, and environment loading
-		main.py         FastAPI application, CORS, and router registration
-		models.py       Domain models (Person) — nothing auth-specific
-		composition.py  Wires auth + Person together, hosts every /auth/* and /user endpoint
-		authentication/ Self-contained auth module — see below
+		authentication/ Self-contained auth module: users, sessions, password hashing, GET /user
+		account/        /account/* endpoints: signup, login, logout (creates User + Person)
+		person/         Person profile model and GET /person/me
+		exercise/       Exercise model, /exercise/* CRUD endpoints, default exercise seeding
 	alembic/        Database migrations
 	tests/          Backend test suite
 	run_tests.sh    Runs the backend tests
 	requirements.txt
 frontend/
 	src/
-		App.jsx       Top-level component, switches on auth state
-		AuthForm.jsx  Sign-in and sign-up form
-		auth.jsx      AuthProvider, holds the current user
-		authContext.js  Auth context and the useAuth hook
-		api.js        fetch wrapper that sends the session cookie
 		main.jsx      React entry point
+		api.js        fetch wrapper that sends the session cookie
+		app/          App shell, layout, home page, and routes
+		features/
+			auth/       Sign-in/sign-up form, AuthProvider, and useAuth hook
+			exercises/  Exercise library, create workout, and perform workout pages
 		*.css         Frontend styling
 	package.json    Frontend scripts and dependencies
 	vite.config.js  Vite configuration
 docker-compose.yml Local PostgreSQL service
-docs/setup.md     Detailed setup and architecture guide
+docs/
+	setup.md        Detailed setup guide
+	ARCHITECTURE.md Architecture overview
+	AUTH.md         Authentication design
+	DEPLOY.md       Railway deployment
+	Design/         Requirements and design material
 ```
 
 ## Quick Start
@@ -78,7 +89,7 @@ The local application uses the frontend at `http://localhost:5173` and the API a
 Use `localhost` for the API, not `127.0.0.1`. The browser treats them as different
 sites, and the session cookie would be dropped.
 
-See [docs/setup.md](docs/setup.md) for the complete file explanation, local setup, Railway configuration, available endpoints, and current limitations.
+See [docs/setup.md](docs/setup.md) for the complete local setup, Railway configuration, available endpoints, and current limitations.
 
 ## Checks
 
