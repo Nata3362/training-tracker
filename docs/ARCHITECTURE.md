@@ -11,6 +11,12 @@ user and person profile together. The rest of the models below are still a
 design. They arrive as further migrations rather than the from-scratch creation
 this doc originally assumed.
 
+Workouts have since been designed and partly built with a different shape from
+the `log_sets` and `plan_exercises` proposal below: performed workouts are
+split into `workout`, `workout_exercise` and `workout_set`, and plans become
+separate templates. [WORKOUT.md](WORKOUT.md) describes the current design and
+supersedes the workout parts of §3–§5.
+
 This document maps the current Apps Script prototype (`Code.gs`, described in
 full in [README.md](README.md) see old folder) onto four layers — **Data → Domain → API →
 View** — so each Sheets tab lands in the right place instead of getting

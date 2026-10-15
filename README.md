@@ -12,12 +12,14 @@ The repository currently contains:
 - A sign-in and sign-up screen on the frontend.
 - A per-user exercise library: create, edit, delete, and list exercises, seeded
   with a set of default exercises. It has a backend API and a frontend page.
+- Saving a performed workout with its exercises and sets through the backend
+  API. Each set keeps a copy of the person's target for that exercise.
 - Alembic database migrations and a backend test suite.
 
-Creating workouts and logging performed workouts are in progress: the frontend
-pages exist as placeholders. Progression analytics and dashboards are planned.
-See [docs/Design/Requirements.md](docs/Design/Requirements.md) for the intended
-workout model.
+Workouts are in progress: the backend can save a whole workout, but reading
+workouts back, targets, templates and the frontend pages are still to come.
+Progression analytics and dashboards are planned. See
+[docs/WORKOUT.md](docs/WORKOUT.md) for the workout design and its status.
 
 ## Project Structure
 
@@ -30,6 +32,7 @@ backend/
 		account/        /account/* endpoints: signup, login, logout (creates User + Person)
 		person/         Person profile model and GET /person/me
 		exercise/       Exercise model, /exercise/* CRUD endpoints, default exercise seeding
+		workout/        Workout, set and target models, POST /workout/new
 	alembic/        Database migrations
 	tests/          Backend test suite
 	run_tests.sh    Runs the backend tests
@@ -51,6 +54,7 @@ docs/
 	ARCHITECTURE.md Architecture overview
 	AUTH.md         Authentication design
 	DEPLOY.md       Railway deployment
+	WORKOUT.md      Workout data model, saving flow, and design decisions
 	Design/         Requirements and design material
 ```
 
