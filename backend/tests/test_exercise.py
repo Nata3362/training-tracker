@@ -1,11 +1,8 @@
-import uuid
 import pytest
 from sqlalchemy import select
 
-from app.authentication.models import User
 from app.exercise.models import EquipmentEnum, ExerciseModel, MuscleGroupEnum
 from app.exercise.error_codes import ExerciseErrorCode
-from app.person.models import Person
 
 
 EXERCISE_BODY = {
@@ -16,38 +13,6 @@ EXERCISE_BODY = {
         "alternative1": None,
         "alternative2": None,
 }
-
-
-@pytest.fixture
-def setup_exercises(create_user, db_session):
-    """Setup the database with an owned, a default, and someone else's exercise."""
-    person = create_user["person"]
-
-    other_user = User(email="other@example.com", password_hash="x")
-    db_session.add(other_user)
-    db_session.flush()
-    other_person = Person(user_id=other_user.id, name="Other")
-    db_session.add(other_person)
-    db_session.flush()
-
-    exercises = {
-        "own": ExerciseModel(
-            name="Squat", muscle_group=MuscleGroupEnum.GLUTES, equipment=EquipmentEnum.BARBELL,
-            increment=2.5, person_id=person.id,
-        ),
-        "default": ExerciseModel(
-            name="Deadlift", muscle_group=MuscleGroupEnum.BACK, equipment=EquipmentEnum.BARBELL,
-            increment=2.5, person_id=None,
-        ),
-        "other": ExerciseModel(
-            name="Overhead Press", muscle_group=MuscleGroupEnum.TRICEPS, equipment=EquipmentEnum.BARBELL,
-            increment=2.5, person_id=other_person.id,
-        ),
-    }
-    db_session.add_all(exercises.values())
-    db_session.commit()
-
-    return exercises
 
 
 def test_exercise_flow(create_user, db_session):
