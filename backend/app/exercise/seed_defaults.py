@@ -4,6 +4,11 @@ from app.database import SessionLocal
 from app.exercise.default_exercises import DEFAULT_EXERCISES
 from app.exercise.models import ExerciseModel
 
+# run standalone, nothing else loads the tables ExerciseModel's foreign keys
+# point at, so register them on Base.metadata before the first query
+from app.authentication import models as authentication_models  # noqa: F401
+from app.person import models as person_models  # noqa: F401
+
 
 def seed_default_exercises():
     with SessionLocal() as db:
