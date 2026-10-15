@@ -9,6 +9,7 @@ from .account import routes as account_routes
 from .person import routes as person_routes
 from .authentication import routes as authentication_routes
 from .exercise import routes as exercise_routes
+from .workout import routes as workout_routes
 
 from .database import get_db
 
@@ -30,6 +31,7 @@ app.include_router(person_routes.router)
 app.include_router(account_routes.router)
 app.include_router(authentication_routes.router)
 app.include_router(exercise_routes.router)
+app.include_router(workout_routes.router)
 
 
 @app.get("/")
