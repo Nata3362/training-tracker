@@ -21,6 +21,8 @@ The current code includes a React frontend, a FastAPI backend, PostgreSQL storag
 - Server-side sessions delivered in an httpOnly cookie.
 - Signup, login, logout, and current-user endpoints.
 - A sign-in and sign-up screen, and session restore on page load.
+- Saving a performed workout with its exercises and sets (`POST /workout/new`).
+  See [WORKOUT.md](WORKOUT.md).
 - A backend test suite covering the authentication endpoints.
 - Local PostgreSQL service through Docker Compose.
 - Frontend and backend deployed as separate Railway services.
@@ -30,7 +32,8 @@ The current code includes a React frontend, a FastAPI backend, PostgreSQL storag
 - Friends, teams, or shared training groups.
 - Workout templates or saved routines.
 - Creating a workout while training.
-- Recording performed workouts and individual sets.
+- Reading saved workouts back, and a frontend for recording workouts.
+- Endpoints for creating and changing targets.
 - Exercise progression calculations or charts.
 - Weekly or monthly dashboard summaries.
 - A multiple-discipline user interface.
@@ -214,6 +217,7 @@ so a failed migration fails the deployment instead of starting a broken release.
 | `POST` | `/auth/login` | Starts a session. Returns `401` for a wrong email or password. |
 | `POST` | `/auth/logout` | Revokes the current session and clears the cookie. |
 | `GET` | `/user` | Returns the signed-in user: `{id, email, name}`. Returns `401` when not signed in. |
+| `POST` | `/workout/new` | Saves a performed workout with its exercises and sets, and returns it. See [WORKOUT.md](WORKOUT.md). |
 
 The health endpoint executes `SELECT 1` before replying `{"database": true}`, so
 it fails rather than reporting healthy when the database is unreachable. Railway
