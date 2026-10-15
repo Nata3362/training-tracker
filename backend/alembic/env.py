@@ -8,6 +8,7 @@ from app.database import DATABASE_URL, Base
 from app.authentication import models as authentication_models
 from app.person import models as person_models
 from app.exercise import models as exercise_models
+from app.workout import models as workout_models
 
 
 # this is the Alembic Config object, which provides
