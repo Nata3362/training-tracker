@@ -32,7 +32,7 @@ backend/
 		account/        /account/* endpoints: signup, login, logout (creates User + Person)
 		person/         Person profile model and GET /person/me
 		exercise/       Exercise model, /exercise/* CRUD endpoints, default exercise seeding
-		workout/        Workout, set and target models, POST /workout/new
+		workout/        Workout, set, target and template models, POST /workout/new
 	alembic/        Database migrations
 	tests/          Backend test suite
 	run_tests.sh    Runs the backend tests
@@ -59,6 +59,33 @@ docs/
 ```
 
 ## Quick Start
+
+### Everything in Docker
+
+```bash
+./start.sh
+```
+
+This starts the database, backend and frontend with `docker compose up --build`.
+On every start the backend applies migrations (`alembic upgrade head`) and seeds
+the default exercises. The source folders are mounted into the containers, so
+code changes reload automatically.
+
+The terminal stays attached and shows the logs; the app is running once the
+backend logs `Application startup complete`. Stop it with Ctrl+C once, or with
+`docker compose down` from another terminal. The data is kept in the
+`postgres_data` volume; `docker compose down -v` deletes it.
+
+Run commands inside the running backend from a second terminal, in the project
+root:
+
+```bash
+docker compose exec backend pytest
+docker compose exec backend alembic revision --autogenerate -m "short description"
+docker compose exec backend alembic upgrade head
+```
+
+### Database in Docker, backend and frontend locally
 
 Start PostgreSQL:
 
@@ -107,6 +134,8 @@ npm run build
 cd backend
 ./run_tests.sh
 ```
+
+Or, with the containers running: `docker compose exec backend pytest`.
 
 ## Deployment
 
