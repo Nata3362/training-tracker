@@ -61,7 +61,7 @@ def workout_post(
         db.commit()
     except IntegrityError:
         db.rollback()
-        raise HTTPException(status_code=400, detail=WorkoutErrorCode.DUPLICATE_SET_NUMBER.value)
+        raise HTTPException(status_code=409, detail=WorkoutErrorCode.WORKOUT_CONFLICT.value)
     db.refresh(workout)
 
     return workout

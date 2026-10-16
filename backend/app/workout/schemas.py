@@ -1,6 +1,6 @@
 import uuid
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, field_validator
 
 from datetime import datetime
 
@@ -56,6 +56,15 @@ class WorkoutExerciseCreate(BaseModel):
     exercise_id: uuid.UUID
     position: int
     sets: list[WorkoutSetCreate]
+    
+    @field_validator("sets")
+    @classmethod
+    def set_number_unique(cls, sets):
+        numbers = [s.set_number for s in sets]
+        if len(numbers) != len(set(numbers)):
+            raise ValueError("set_number must be unique within an exercise")
+        return sets
+
 
 class WorkoutExerciseResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
@@ -71,6 +80,14 @@ class WorkoutCreate(BaseModel):
     name: str
     date: datetime
     exercises: list[WorkoutExerciseCreate]
+    @field_validator("exercises")
+    @classmethod
+    def exercise_position_unique(cls, exercises):
+        numbers = [e.position for e in exercises]
+        if len(numbers) != len(set(numbers)):
+            raise ValueError("position must be unique within a workout")
+        return exercises
+
 
 class WorkoutResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)

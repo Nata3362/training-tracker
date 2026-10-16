@@ -6,6 +6,7 @@ from app.authentication.models import User
 from app.workout.models import StatusEnum, Workout, WorkoutExercise, WorkoutSet, Target
 from app.workout.error_codes import WorkoutErrorCode
 from app.person.models import Person
+from app.exercise.error_codes import ExerciseErrorCode
 
 
 def workout_body(own_id, default_id):
@@ -111,3 +112,95 @@ def test_create_workout(create_user, setup_exercises, setup_target, db_session):
 
     assert target_table.count() == targets_before
 
+def test_create_workout_duplicate_set_number(create_user, setup_exercises, db_session):
+    "Two sets with the same number in one exercise are rejected and nothing i saved."
+    client = create_user["client"]
+    own_exercise = setup_exercises["own"]
+    default_exercise = setup_exercises["default"]
+
+    payload = workout_body(own_exercise.id, default_exercise.id)
+
+    # break: second set of first exercise gets the same number as the first
+    payload["exercises"][0]["sets"][1]["set_number"] = 1
+
+    response = client.post("/workout/new", json=payload)
+
+    assert response.status_code == 422
+    assert "set_number must be unique" in response.text
+    assert db_session.query(Workout).count() == 0
+
+
+def test_create_workout_requires_session(create_user, setup_exercises,db_session):
+    client = create_user["client"]
+    own_exercise = setup_exercises["own"]
+    default_exercise = setup_exercises["default"]
+
+    payload = workout_body(own_exercise.id, default_exercise.id)
+
+    client.post("/account/logout")
+    logout_response = client.get("/user")
+    assert logout_response.status_code == 401
+
+    response = client.post("/workout/new", json=payload)
+    assert response.status_code == 401
+    assert db_session.query(Workout).count() == 0
+
+
+def test_create_workout_other_persons_exercise(create_user, create_other_person, setup_exercises, db_session):
+    client = create_user["client"]
+    own_exercise = setup_exercises["own"]
+    default_exercise = setup_exercises["default"]
+    other_person_exercise = setup_exercises["other"]
+
+    # break: set the other_person_exercise_id instead of own_id 
+    payload = workout_body(own_id=other_person_exercise.id, default_id=default_exercise.id)
+    response = client.post("/workout/new", json=payload)
+    assert response.status_code == 404
+    assert response.json()["detail"] == ExerciseErrorCode.EXERCISE_NOT_FOUND.value
+    assert db_session.query(Workout).count() == 0
+
+@pytest.mark.parametrize("field", ["name","date","exercises"])
+def test_create_workout_requires_field(field, create_user, setup_exercises, db_session):
+    client = create_user["client"]
+    own_exercise = setup_exercises["own"]
+    default_exercise = setup_exercises["default"]
+
+    payload = workout_body(own_id=own_exercise.id, default_id=default_exercise.id)
+    # break:delete date
+    del payload[field]
+
+    response = client.post("/workout/new", json=payload)
+    assert response.status_code == 422
+    assert db_session.query(Workout).count() == 0
+
+def test_two_workouts_can_reuse_set_numbers(create_user, setup_exercises, db_session):
+    client = create_user["client"]
+    own_exercise = setup_exercises["own"]
+    default_exercise = setup_exercises["default"]
+
+    payload = workout_body(own_id=own_exercise.id, default_id=default_exercise.id)
+
+    response = client.post("/workout/new", json=payload)
+    assert response.status_code == 201
+    assert db_session.query(WorkoutSet).count() == 5
+
+    payload = workout_body(own_id=own_exercise.id, default_id=default_exercise.id)
+
+    response = client.post("/workout/new", json=payload)
+    assert response.status_code == 201
+    assert db_session.query(WorkoutSet).count() == 10
+
+def test_create_workout_duplicate_positon(create_user, setup_exercises, db_session):
+    client = create_user["client"]
+    own_exercise = setup_exercises["own"]
+    default_exercise = setup_exercises["default"]
+
+    payload = workout_body(own_id=own_exercise.id, default_id=default_exercise.id)
+    # break: second exercise gets the same postion and the first
+    payload["exercises"][1]["position"] = 1
+    response = client.post("/workout/new", json=payload)
+
+    assert response.status_code == 422
+    assert "position must be unique" in response.text
+
+    assert db_session.query(Workout).count() == 0
