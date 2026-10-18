@@ -11,7 +11,7 @@ The repository currently contains:
 - Email and password authentication using server-side sessions in an httpOnly cookie.
 - A sign-in and sign-up screen on the frontend.
 - A per-user exercise library: create, edit, delete, and list exercises, seeded
-  with a set of default exercises. It has a backend API and a frontend page.
+  with a set of default exercises.
 - Saving a performed workout with its exercises and sets through the backend
   API. Each set keeps a copy of the person's target for that exercise.
 - Alembic database migrations and a backend test suite.
